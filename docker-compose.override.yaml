@@ -10,6 +10,7 @@ services:
     environment:
       - MODE=json-rpc # crucial: enables JSON-RPC daemon
       - PORT=8080
+      - SWAGGER_HOST=localhost:8081
       - SIGNAL_CLI_OPTS=--ignore-stickers --send-receipts # optional tweaks
       # Optional: - USE_GROUP_V2=true (if you use new groups)
 

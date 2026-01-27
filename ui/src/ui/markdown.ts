@@ -76,42 +76,59 @@ const renderer = {
     let code = "";
     let lang = "plain";
 
+    // Extract code and lang from the token (marked v5+ format)
+    if (typeof tokenOrCode === "object" && tokenOrCode !== null) {
+      code = tokenOrCode.text ?? "";
+      lang = tokenOrCode.lang || "plain";
+    } else if (typeof tokenOrCode === "string") {
+      // Legacy format fallback
+      code = tokenOrCode;
+      lang = typeof infostring === "string" ? infostring : "plain";
+    }
+
     // Custom renderer for Grok-style code blocks
     // Note: We deliberately do NOT use the 'collapsed' logic here anymore for sidebar/tool outputs
     // to ensure they are always fully visible and scrollable.
-    
+
     // Highlight using highlight.js
     let highlighted;
     try {
       // Clean up language string (e.g. "json" from "```json")
       const cleanLang = (lang || "").toLowerCase().trim();
-      
+
       // Map common aliases/extensions to highlight.js names
       const langMap: Record<string, string> = {
-        "js": "javascript",
-        "ts": "typescript",
-        "py": "python",
-        "sh": "bash",
-        "yml": "yaml",
-        "md": "markdown",
+        js: "javascript",
+        ts: "typescript",
+        py: "python",
+        sh: "bash",
+        yml: "yaml",
+        md: "markdown",
       };
-      
+
       const targetLang = langMap[cleanLang] || cleanLang;
 
       // Auto-detect if generic/plain
-      if (!targetLang || targetLang === "plain" || targetLang === "text" || targetLang === "plaintext") {
+      if (
+        !targetLang ||
+        targetLang === "plain" ||
+        targetLang === "text" ||
+        targetLang === "plaintext"
+      ) {
+        const auto = hljs.highlightAuto(code);
+        highlighted = auto.value;
+      } else {
+        // Check if language is supported, fallback to plaintext if not
+        const validLang = hljs.getLanguage(targetLang)
+          ? targetLang
+          : "plaintext";
+        if (validLang === "plaintext") {
+          // Fallback to auto if explicit lang is invalid/unknown
           const auto = hljs.highlightAuto(code);
           highlighted = auto.value;
-      } else {
-          // Check if language is supported, fallback to plaintext if not
-          const validLang = hljs.getLanguage(targetLang) ? targetLang : "plaintext";
-          if (validLang === "plaintext") {
-             // Fallback to auto if explicit lang is invalid/unknown
-             const auto = hljs.highlightAuto(code);
-             highlighted = auto.value;
-          } else {
-             highlighted = hljs.highlight(code, { language: validLang }).value;
-          }
+        } else {
+          highlighted = hljs.highlight(code, { language: validLang }).value;
+        }
       }
     } catch (e) {
       // Last resort fallback
