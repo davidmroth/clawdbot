@@ -370,8 +370,11 @@ export const chatHandlers: GatewayRequestHandlers = {
     });
     const now = Date.now();
     const clientRunId = p.idempotencyKey;
+    const isWatchdog = clientRunId.startsWith("watchdog-");
 
-    WatchdogService.cancelCheck(p.sessionKey);
+    if (!isWatchdog) {
+        WatchdogService.cancelCheck(p.sessionKey);
+    }
 
     const sendPolicy = resolveSendPolicy({
       cfg,
@@ -519,36 +522,44 @@ export const chatHandlers: GatewayRequestHandlers = {
               const { storePath: latestStorePath, entry: latestEntry } = loadSessionEntry(
                 p.sessionKey,
               );
+              // Use entry from closure or latestEntry
               const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
-              const appended = appendAssistantTranscriptMessage({
-                message: combinedReply,
-                sessionId,
-                storePath: latestStorePath,
-                sessionFile: latestEntry?.sessionFile,
-                createIfMissing: true,
-              });
-              if (appended.ok) {
-                message = appended.message;
-              } else {
-                context.logGateway.warn(
-                  `webchat transcript append failed: ${appended.error ?? "unknown error"}`,
-                );
-                const now = Date.now();
-                message = {
-                  role: "assistant",
-                  content: [{ type: "text", text: combinedReply }],
-                  timestamp: now,
-                  stopReason: "injected",
-                  usage: { input: 0, output: 0, totalTokens: 0 },
-                };
+              
+              const isWatchdog = clientRunId.startsWith("watchdog-");
+              if (!isWatchdog) {
+                  const appended = appendAssistantTranscriptMessage({
+                    message: combinedReply,
+                    sessionId,
+                    storePath: latestStorePath,
+                    sessionFile: latestEntry?.sessionFile,
+                    createIfMissing: true,
+                  });
+                  if (appended.ok) {
+                    message = appended.message;
+                  } else {
+                    context.logGateway.warn(
+                      `webchat transcript append failed: ${appended.error ?? "unknown error"}`,
+                    );
+                    const now = Date.now();
+                    message = {
+                      role: "assistant",
+                      content: [{ type: "text", text: combinedReply }],
+                      timestamp: now,
+                      stopReason: "injected",
+                      usage: { input: 0, output: 0, totalTokens: 0 },
+                    };
+                  }
               }
             }
-            broadcastChatFinal({
-              context,
-              runId: clientRunId,
-              sessionKey: p.sessionKey,
-              message,
-            });
+            // Filter out final broadcast for watchdog runs
+            if (!clientRunId.startsWith("watchdog-")) {
+              broadcastChatFinal({
+                context,
+                runId: clientRunId,
+                sessionKey: p.sessionKey,
+                message,
+              });
+            }
           }
           context.dedupe.set(`chat:${clientRunId}`, {
             ts: Date.now(),
@@ -568,12 +579,14 @@ export const chatHandlers: GatewayRequestHandlers = {
             },
             error,
           });
-          broadcastChatError({
-            context,
-            runId: clientRunId,
-            sessionKey: p.sessionKey,
-            errorMessage: String(err),
-          });
+          if (!clientRunId.startsWith("watchdog-")) {
+            broadcastChatError({
+              context,
+              runId: clientRunId,
+              sessionKey: p.sessionKey,
+              errorMessage: String(err),
+            });
+          }
         })
         .finally(() => {
           context.chatAbortControllers.delete(clientRunId);

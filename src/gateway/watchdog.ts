@@ -88,8 +88,8 @@ If no, or if they have already acked, do nothing.`;
         this.logger?.warn(`watchdog dispatch failed: ${formatForLog(err)}`);
       },
       deliver: async (payload, info) => {
-        // We don't really need to "deliver" the reply anywhere specific, 
-        // as the agent's tools (message.send) will do the actual work.
+        // We suppress the final delivery to avoid triggering any side effects
+        // The agent will use its tools (message.send) to notify.
       },
     });
 
@@ -100,6 +100,7 @@ If no, or if they have already acked, do nothing.`;
         ctx,
         cfg,
         dispatcher,
+        skipTranscriptAppend: true, // Tell system to not log this input
         replyOptions: {
           runId: clientRunId,
           abortSignal: abortController.signal,

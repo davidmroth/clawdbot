@@ -218,15 +218,26 @@ export function createAgentEventHandler({
       });
     }
     agentRunSeq.set(evt.runId, evt.seq);
-    broadcast("agent", agentPayload);
+    
+    const isWatchdogRun = evt.runId.startsWith("watchdog-");
+
+    // Only broadcast globally if NOT a watchdog run (or if we really want debug visibility, but user asked to hide it)
+    if (!isWatchdogRun) {
+        broadcast("agent", agentPayload);
+    }
 
     const lifecyclePhase =
       evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
 
     if (sessionKey) {
-      nodeSendToSession(sessionKey, "agent", agentPayload);
+      // Only broadcast agent events if NOT a watchdog run, or if it's a tool event (we might want to see side effects like messages)
+      if (!isWatchdogRun || evt.stream === "tool") {
+        nodeSendToSession(sessionKey, "agent", agentPayload);
+      }
       if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
-        emitChatDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
+        if (!isWatchdogRun) {
+          emitChatDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
+        }
       } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         if (chatLink) {
           const finished = chatRunState.registry.shift(evt.runId);
@@ -234,23 +245,31 @@ export function createAgentEventHandler({
             clearAgentRunContext(evt.runId);
             return;
           }
-          emitChatFinal(
-            finished.sessionKey,
-            finished.clientRunId,
-            evt.seq,
-            lifecyclePhase === "error" ? "error" : "done",
-            evt.data?.error,
-          );
+          // Only emit Chat Final (which updates the transcript UI) if it's NOT a watchdog run
+          if (!finished.clientRunId.startsWith("watchdog-")) {
+            emitChatFinal(
+              finished.sessionKey,
+              finished.clientRunId,
+              evt.seq,
+              lifecyclePhase === "error" ? "error" : "done",
+              evt.data?.error,
+            );
+          }
         } else {
-          emitChatFinal(
-            sessionKey,
-            evt.runId,
-            evt.seq,
-            lifecyclePhase === "error" ? "error" : "done",
-            evt.data?.error,
-          );
+          // Same check for direct runs
+          if (!isWatchdogRun) {
+            emitChatFinal(
+              sessionKey,
+              evt.runId,
+              evt.seq,
+              lifecyclePhase === "error" ? "error" : "done",
+              evt.data?.error,
+            );
+          }
         }
-        WatchdogService.scheduleCheck(sessionKey);
+        if (!isWatchdogRun) {
+          WatchdogService.scheduleCheck(sessionKey);
+        }
       } else if (isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         chatRunState.abortedRuns.delete(clientRunId);
         chatRunState.abortedRuns.delete(evt.runId);

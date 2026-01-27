@@ -47,8 +47,9 @@ export class MonacoEditorWrapper extends LitElement {
   }
 
   initLoader() {
-    // Load locally from the public assets we just downloaded
-    require.config({ paths: { 'vs': '/monaco-editor/min/vs' }});
+    // Revert to CDN as the local assets seem to be causing 404/loading issues
+    // This ensures reliability while we debug the local asset serving
+    require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' }});
     require(['vs/editor/editor.main'], () => {
       this.initEditor();
     });

@@ -99,6 +99,7 @@ const GROUP_ORDER: Record<string, number> = {
   discovery: 210,
   presence: 220,
   voicewake: 230,
+  notifications: 240,
   logging: 900,
 };
 

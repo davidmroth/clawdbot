@@ -79,6 +79,13 @@ export async function dispatchReplyFromConfig(params: {
   replyResolver?: typeof getReplyFromConfig;
 }): Promise<DispatchFromConfigResult> {
   const { ctx, cfg, dispatcher } = params;
+  
+  // Check if we should skip transcript appending (passed via dispatcher options if supported, 
+  // but currently we rely on upstream handlers respecting the skip flag or run ID conventions)
+  // For webchat specifically, the `chat.send` handler manages the transcript append.
+  // However, `dispatchInboundMessage` is also used for internal/cron triggers.
+  // The prompt "System Event: ..." is typically added to context BEFORE dispatch.
+  
   const diagnosticsEnabled = isDiagnosticsEnabled(cfg);
   const channel = String(ctx.Surface ?? ctx.Provider ?? "unknown").toLowerCase();
   const chatId = ctx.To ?? ctx.From;
@@ -149,38 +156,43 @@ export async function dispatchReplyFromConfig(params: {
           : typeof ctx.Body === "string"
             ? ctx.Body
             : "";
-    const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
-    const conversationId = ctx.OriginatingTo ?? ctx.To ?? ctx.From ?? undefined;
+    // Avoid running message_received hooks for watchdog events
+    const isWatchdog = messageIdForHook?.startsWith("watchdog-") || ctx.SenderUsername === "watchdog";
+    
+    if (!isWatchdog) {
+        const channelId = (ctx.OriginatingChannel ?? ctx.Surface ?? ctx.Provider ?? "").toLowerCase();
+        const conversationId = ctx.OriginatingTo ?? ctx.To ?? ctx.From ?? undefined;
 
-    void hookRunner
-      .runMessageReceived(
-        {
-          from: ctx.From ?? "",
-          content,
-          timestamp,
-          metadata: {
-            to: ctx.To,
-            provider: ctx.Provider,
-            surface: ctx.Surface,
-            threadId: ctx.MessageThreadId,
-            originatingChannel: ctx.OriginatingChannel,
-            originatingTo: ctx.OriginatingTo,
-            messageId: messageIdForHook,
-            senderId: ctx.SenderId,
-            senderName: ctx.SenderName,
-            senderUsername: ctx.SenderUsername,
-            senderE164: ctx.SenderE164,
-          },
-        },
-        {
-          channelId,
-          accountId: ctx.AccountId,
-          conversationId,
-        },
-      )
-      .catch((err) => {
-        logVerbose(`dispatch-from-config: message_received hook failed: ${String(err)}`);
-      });
+        void hookRunner
+        .runMessageReceived(
+            {
+            from: ctx.From ?? "",
+            content,
+            timestamp,
+            metadata: {
+                to: ctx.To,
+                provider: ctx.Provider,
+                surface: ctx.Surface,
+                threadId: ctx.MessageThreadId,
+                originatingChannel: ctx.OriginatingChannel,
+                originatingTo: ctx.OriginatingTo,
+                messageId: messageIdForHook,
+                senderId: ctx.SenderId,
+                senderName: ctx.SenderName,
+                senderUsername: ctx.SenderUsername,
+                senderE164: ctx.SenderE164,
+            },
+            },
+            {
+            channelId,
+            accountId: ctx.AccountId,
+            conversationId,
+            },
+        )
+        .catch((err) => {
+            logVerbose(`dispatch-from-config: message_received hook failed: ${String(err)}`);
+        });
+    }
   }
 
   // Check if we should route replies to originating channel instead of dispatcher.

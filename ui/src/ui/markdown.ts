@@ -82,17 +82,40 @@ const renderer = {
     
     // Highlight using highlight.js
     let highlighted;
-    // Auto-detect if generic/plain
-    if (!lang || lang === "plain" || lang === "text" || lang === "plaintext") {
-        const auto = hljs.highlightAuto(code);
-        highlighted = auto.value;
-        // If detection is confident, maybe update lang label?
-        // For now, keep "text" to avoid confusing label jumps, 
-        // but the coloring will be smarter.
-    } else {
-        const hasLang = hljs.getLanguage(lang);
-        const validLang = hasLang ? lang : "plaintext";
-        highlighted = hljs.highlight(code, { language: validLang }).value;
+    try {
+      // Clean up language string (e.g. "json" from "```json")
+      const cleanLang = (lang || "").toLowerCase().trim();
+      
+      // Map common aliases/extensions to highlight.js names
+      const langMap: Record<string, string> = {
+        "js": "javascript",
+        "ts": "typescript",
+        "py": "python",
+        "sh": "bash",
+        "yml": "yaml",
+        "md": "markdown",
+      };
+      
+      const targetLang = langMap[cleanLang] || cleanLang;
+
+      // Auto-detect if generic/plain
+      if (!targetLang || targetLang === "plain" || targetLang === "text" || targetLang === "plaintext") {
+          const auto = hljs.highlightAuto(code);
+          highlighted = auto.value;
+      } else {
+          // Check if language is supported, fallback to plaintext if not
+          const validLang = hljs.getLanguage(targetLang) ? targetLang : "plaintext";
+          if (validLang === "plaintext") {
+             // Fallback to auto if explicit lang is invalid/unknown
+             const auto = hljs.highlightAuto(code);
+             highlighted = auto.value;
+          } else {
+             highlighted = hljs.highlight(code, { language: validLang }).value;
+          }
+      }
+    } catch (e) {
+      // Last resort fallback
+      highlighted = escapeHtml(code);
     }
 
     // Icons

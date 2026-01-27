@@ -497,8 +497,10 @@ export function renderApp(state: AppViewState) {
                 // Heuristic: Auto-detect language for edit mode if not explicitly set
                 if (mode === "edit" && !state.sidebarLanguage) {
                     if (content.trim().startsWith("{")) state.handleSidebarLanguageChange("json");
-                    else if (content.includes("import ") || content.includes("const ")) state.handleSidebarLanguageChange("javascript");
-                    else if (content.includes("def ") || content.includes("import ")) state.handleSidebarLanguageChange("python");
+                    else if (content.includes("import ") || content.includes("const ") || content.includes("function ")) state.handleSidebarLanguageChange("javascript");
+                    else if (content.includes("def ") || content.includes("import ") || content.includes("class ")) state.handleSidebarLanguageChange("python");
+                    else if (content.includes("<html>") || content.includes("</div>")) state.handleSidebarLanguageChange("html");
+                    else if (content.includes("body {") || content.includes(".class")) state.handleSidebarLanguageChange("css");
                     else state.handleSidebarLanguageChange("plaintext");
                 }
                 state.handleOpenSidebar(content, mode);
