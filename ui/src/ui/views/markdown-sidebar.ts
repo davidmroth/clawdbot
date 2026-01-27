@@ -7,6 +7,7 @@ import "../components/monaco-editor-wrapper";
 
 export type MarkdownSidebarProps = {
   content: string | null;
+  mode?: "view" | "edit";
   language?: string;
   error: string | null;
   onClose: () => void;
@@ -32,7 +33,7 @@ const LANGUAGES = [
 ];
 
 export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
-  const isToolOutput = props.content?.startsWith("```") ?? false;
+  const isToolOutput = props.mode !== "edit";
   
   return html`
     <div class="sidebar-panel">

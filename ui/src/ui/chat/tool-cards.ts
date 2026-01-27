@@ -55,7 +55,7 @@ export function extractToolCards(message: unknown): ToolCard[] {
 
 export function renderToolCardSidebar(
   card: ToolCard,
-  onOpenSidebar?: (content: string) => void,
+  onOpenSidebar?: (content: string, mode?: "view" | "edit") => void,
 ) {
   const display = resolveToolDisplay({ name: card.name, args: card.args });
   const detail = formatToolDetail(display);
@@ -65,13 +65,22 @@ export function renderToolCardSidebar(
   const handleClick = canClick
     ? () => {
         if (hasText) {
-          onOpenSidebar!(formatToolOutputForSidebar(card.text!));
+          // If it's an exec tool, we likely want to preserve logs/whitespace, so we wrap it.
+          // Otherwise (read, etc.), we pass it raw so the markdown renderer can do its job.
+          if (card.kind === "call" || card.name === "exec" || card.name === "process") {
+             const formatted = formatToolOutputForSidebar(card.text!);
+             // Ensure it's wrapped if not already
+             const wrapped = formatted.startsWith("```") ? formatted : `\`\`\`text\n${formatted}\n\`\`\``;
+             onOpenSidebar!(wrapped, "view");
+          } else {
+             onOpenSidebar!(card.text!, "view");
+          }
           return;
         }
         const info = `## ${display.label}\n\n${
           detail ? `**Command:** \`${detail}\`\n\n` : ""
         }*No output — tool completed successfully.*`;
-        onOpenSidebar!(info);
+        onOpenSidebar!(info, "view");
       }
     : undefined;
 

@@ -489,10 +489,11 @@ export function renderApp(state: AppViewState) {
               // Sidebar props for tool output viewing
               sidebarOpen: state.sidebarOpen,
               sidebarContent: state.sidebarContent,
+              sidebarMode: state.sidebarMode,
               sidebarLanguage: state.sidebarLanguage,
               sidebarError: state.sidebarError,
               splitRatio: state.splitRatio,
-              onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
+              onOpenSidebar: (content: string, mode?: "view" | "edit") => state.handleOpenSidebar(content, mode),
               onSidebarContentChange: (content: string) => state.handleSidebarContentChange(content),
               onSidebarLanguageChange: (language: string) => state.handleSidebarLanguageChange(language),
               onCloseSidebar: () => state.handleCloseSidebar(),
