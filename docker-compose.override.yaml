@@ -1,0 +1,46 @@
+services:
+  signal:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: signal-cli
+    restart: unless-stopped
+    volumes:
+      - signal-data:/home/.local/share/signal-cli
+    ports:
+      - "8081:8080" # ← optional: expose to host for manual testing / linking
+    environment:
+      - MODE=json-rpc # crucial: enables JSON-RPC daemon
+      - PORT=8080
+      - SIGNAL_CLI_OPTS=--ignore-stickers --send-receipts # optional tweaks
+      # Optional: - USE_GROUP_V2=true (if you use new groups)
+
+  clawdbot-build:
+    build:
+      target: builder
+      dockerfile: Dockerfile
+    command: npx tsx /app/builder/server.ts
+    user: root
+    volumes:
+      - .:/app
+      - clawdbot-dist:/app/dist
+    ports:
+      - "3000:3000"
+
+  clawdbot-gateway:
+    environment:
+      - CLAWDBOT_CHANNELS_SIGNAL_ENABLED=true
+      - CLAWDBOT_CHANNELS_SIGNAL_RPC_URL=http://signal:8080
+      - CLAWDBOT_CHANNELS_SIGNAL_PHONE_NUMBER=+18449612823
+    volumes:
+      - .:/app/src
+      - clawdbot-dist:/app/dist
+    depends_on:
+      - signal
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "1" # number of files or file count
+        max-size: "1m" # file size
+
+volumes:
+  signal-data:
+  clawdbot-dist:
