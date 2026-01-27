@@ -299,12 +299,15 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     }
     const envelope = payload?.envelope;
     if (!envelope) return;
-    if (envelope.syncMessage) return;
+    
+    // PATCH: Allow Note to Self (synced messages)
+    // if (envelope.syncMessage) return;
 
     const sender = resolveSignalSender(envelope);
     if (!sender) return;
     if (deps.account && sender.kind === "phone") {
-      if (sender.e164 === normalizeE164(deps.account)) return;
+        // PATCH: Allow if it's a sync message
+      if (sender.e164 === normalizeE164(deps.account) && !envelope.syncMessage) return;
     }
 
     const dataMessage = envelope.dataMessage ?? envelope.editMessage?.dataMessage;

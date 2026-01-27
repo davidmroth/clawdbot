@@ -27,6 +27,9 @@ import {
   resolveHookDeliver,
 } from "./hooks.js";
 import { applyHookMappings } from "./hooks-mapping.js";
+import { authorizeGatewayConnect } from "./auth.js";
+import { getBearerToken } from "./http-utils.js";
+import { sendMethodNotAllowed, sendUnauthorized } from "./http-common.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
@@ -238,6 +241,32 @@ export function createGatewayHttpServer(opts: {
     try {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
+
+      // PATCH: Add /restart endpoint
+      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      if (url.pathname === "/v1/restart" || url.pathname === "/restart") {
+          if (req.method !== "POST") {
+              sendMethodNotAllowed(res, "POST");
+              return;
+          }
+          const token = getBearerToken(req);
+          const authResult = await authorizeGatewayConnect({
+              auth: resolvedAuth,
+              connectAuth: token ? { token, password: token } : null,
+              req,
+              trustedProxies,
+          });
+          if (!authResult.ok) {
+              sendUnauthorized(res);
+              return;
+          }
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true, status: "restarting" }));
+          setTimeout(() => process.exit(1), 200);
+          return;
+      }
+
       if (await handleHooksRequest(req, res)) return;
       if (
         await handleToolsInvokeHttpRequest(req, res, {

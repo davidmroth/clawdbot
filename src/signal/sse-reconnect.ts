@@ -1,3 +1,4 @@
+import { WebSocket } from "ws";
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import type { BackoffPolicy } from "../infra/backoff.js";
 import { computeBackoff, sleepWithAbort } from "../infra/backoff.js";
@@ -32,6 +33,12 @@ export async function runSignalSseLoop({
     ...DEFAULT_RECONNECT_POLICY,
     ...policy,
   };
+
+  // PATCH: Use WebSocket for signal-cli-rest-api compatibility
+  let wsBase = baseUrl.replace(/^http/, 'ws');
+  if (wsBase.endsWith("/")) wsBase = wsBase.slice(0, -1);
+  const wsUrl = `${wsBase}/v1/receive/${encodeURIComponent(account || '')}`;
+
   let reconnectAttempts = 0;
 
   const logReconnectVerbose = (message: string) => {
@@ -39,28 +46,60 @@ export async function runSignalSseLoop({
     logVerbose(message);
   };
 
+  const connect = () => {
+    return new Promise<void>((resolve, reject) => {
+      if (abortSignal?.aborted) return resolve();
+
+      runtime.log?.(`Connecting to Signal WebSocket: ${wsUrl}`);
+      const ws = new WebSocket(wsUrl);
+      
+      ws.on('open', () => {
+        reconnectAttempts = 0;
+        logReconnectVerbose("Signal WebSocket connected.");
+      });
+
+      ws.on('message', (data) => {
+        if (abortSignal?.aborted) {
+          ws.close();
+          return;
+        }
+        try {
+           onEvent({
+            event: "receive",
+            data: data.toString()
+          }); 
+        } catch (err: any) {
+          runtime.error?.(`Error parsing WS message: ${err.message}`);
+        }
+      });
+
+      ws.on('error', (err) => {
+        if (!abortSignal?.aborted) {
+           // runtime.error?.(`Signal WebSocket error: ${err.message}`);
+        }
+      });
+
+      ws.on('close', (code, reason) => {
+        if (abortSignal?.aborted) return resolve();
+        reject(new Error(`WebSocket closed: ${code} ${reason}`));
+      });
+      
+       abortSignal?.addEventListener('abort', () => {
+        ws.close();
+        resolve();
+      }, { once: true });
+    });
+  };
+
   while (!abortSignal?.aborted) {
     try {
-      await streamSignalEvents({
-        baseUrl,
-        account,
-        abortSignal,
-        onEvent: (event) => {
-          reconnectAttempts = 0;
-          onEvent(event);
-        },
-      });
-      if (abortSignal?.aborted) return;
-      reconnectAttempts += 1;
-      const delayMs = computeBackoff(reconnectPolicy, reconnectAttempts);
-      logReconnectVerbose(`Signal SSE stream ended, reconnecting in ${delayMs / 1000}s...`);
-      await sleepWithAbort(delayMs, abortSignal);
+      await connect();
     } catch (err) {
       if (abortSignal?.aborted) return;
-      runtime.error?.(`Signal SSE stream error: ${String(err)}`);
+      runtime.error?.(`Signal WS stream error: ${String(err)}`);
       reconnectAttempts += 1;
       const delayMs = computeBackoff(reconnectPolicy, reconnectAttempts);
-      runtime.log?.(`Signal SSE connection lost, reconnecting in ${delayMs / 1000}s...`);
+      runtime.log?.(`Signal WS connection lost, reconnecting in ${delayMs / 1000}s...`);
       try {
         await sleepWithAbort(delayMs, abortSignal);
       } catch (sleepErr) {

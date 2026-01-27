@@ -57,29 +57,76 @@ export async function signalRpcRequest<T = unknown>(
   opts: SignalRpcOptions,
 ): Promise<T> {
   const baseUrl = normalizeBaseUrl(opts.baseUrl);
-  const id = randomUUID();
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    method,
-    params,
-    id,
-  });
+  
+  // PATCH: Route specific methods to REST endpoints for signal-cli-rest-api compatibility
+  let endpoint = `${baseUrl}/api/v1/rpc`;
+  let bodyPayload: string;
+
+  if (method === "send") {
+      endpoint = `${baseUrl}/v2/send`;
+      const restParams = { ...params };
+      // Map 'account' (internal) to 'number' (API expects this for sender)
+      if (restParams.account && !restParams.number) {
+          restParams.number = restParams.account;
+      }
+      // Map 'recipient' (RPC style) to 'recipients' (REST style)
+      if (restParams.recipient && !restParams.recipients) {
+          restParams.recipients = restParams.recipient;
+          delete restParams.recipient;
+      }
+      bodyPayload = JSON.stringify(restParams);
+  } else if (method === "sendTyping") {
+      // Best effort mapping for typing
+      endpoint = `${baseUrl}/v1/typing_indicator/${encodeURIComponent(String(params?.account || ''))}`;
+      const restParams = { ...params };
+      // Remove account from body as it is in URL
+      delete restParams.account;
+      bodyPayload = JSON.stringify(restParams);
+      // NOTE: If this endpoint doesn't exist on the server, it will 404, but that is acceptable for typing.
+  } else {
+      // Default to RPC for everything else
+      const id = randomUUID();
+      bodyPayload = JSON.stringify({
+        jsonrpc: "2.0",
+        method,
+        params,
+        id,
+      });
+  }
+
+  // LOGGING DEBUG
+  console.log(`[SignalRPC] Request: method=${method} endpoint=${endpoint}`);
+
   const res = await fetchWithTimeout(
-    `${baseUrl}/api/v1/rpc`,
+    endpoint,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body,
+      body: bodyPayload,
     },
     opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   );
   if (res.status === 201) {
     return undefined as T;
   }
-  const text = await res.text();
+  let text = await res.text();
   if (!text) {
     throw new Error(`Signal RPC empty response (status ${res.status})`);
   }
+
+  // PATCH: Sanitize response (some versions of signal-cli-rest-api leak stdout/progress bars)
+  const jsonStart = text.indexOf('{');
+  const jsonEnd = text.lastIndexOf('}');
+  
+  // LOGGING
+  if (text.trim().length > 0 && (jsonStart === -1 || jsonEnd === -1)) {
+     console.log(`[SignalRPC] Invalid JSON candidate: ${JSON.stringify(text)}`);
+  }
+
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
+      text = text.slice(jsonStart, jsonEnd + 1);
+  }
+
   const parsed = JSON.parse(text) as SignalRpcResponse<T>;
   if (parsed.error) {
     const code = parsed.error.code ?? "unknown";

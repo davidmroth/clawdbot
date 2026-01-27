@@ -43,6 +43,7 @@ COPY --from=builder /app/skills ./skills
 COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/node_modules ./node_modules
 
+RUN mkdir src
 RUN chown -R node:node ./src
 RUN chown -R node:node ./dist
 
