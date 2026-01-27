@@ -133,6 +133,7 @@ export class ClawdbotApp extends LitElement {
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
+  @state() sidebarLanguage = "javascript";
   @state() sidebarError: string | null = null;
   @state() splitRatio = this.settings.splitRatio;
 
@@ -457,6 +458,14 @@ export class ClawdbotApp extends LitElement {
     this.sidebarContent = content;
     this.sidebarError = null;
     this.sidebarOpen = true;
+  }
+
+  handleSidebarContentChange(content: string) {
+    this.sidebarContent = content;
+  }
+
+  handleSidebarLanguageChange(language: string) {
+    this.sidebarLanguage = language;
   }
 
   handleCloseSidebar() {

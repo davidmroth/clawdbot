@@ -2,6 +2,8 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { truncateText } from "./format";
 
+declare const hljs: any;
+
 marked.setOptions({
   gfm: true,
   breaks: true,
@@ -13,8 +15,10 @@ const allowedTags = [
   "b",
   "blockquote",
   "br",
+  "button",
   "code",
   "del",
+  "div",
   "em",
   "h1",
   "h2",
@@ -25,8 +29,13 @@ const allowedTags = [
   "li",
   "ol",
   "p",
+  "path",
+  "polyline",
   "pre",
+  "rect",
+  "span",
   "strong",
+  "svg",
   "table",
   "tbody",
   "td",
@@ -36,7 +45,80 @@ const allowedTags = [
   "ul",
 ];
 
-const allowedAttrs = ["class", "href", "rel", "target", "title", "start"];
+const allowedAttrs = [
+  "aria-hidden",
+  "aria-label",
+  "class",
+  "d",
+  "fill",
+  "height",
+  "href",
+  "points",
+  "rel",
+  "rx",
+  "ry",
+  "start",
+  "stroke",
+  "stroke-width",
+  "target",
+  "title",
+  "type",
+  "viewBox",
+  "width",
+  "x",
+  "y",
+];
+
+// Custom renderer for Grok-style code blocks
+const renderer = {
+  // Marked v5+ passes a token object: { type: 'code', raw, text, lang, ... }
+  code(tokenOrCode: any, infostring?: string, escaped?: boolean) {
+    let code = "";
+    let lang = "plain";
+
+    // Handle Marked v5+ object signature
+    if (typeof tokenOrCode === "object" && tokenOrCode !== null && "text" in tokenOrCode) {
+      code = String(tokenOrCode.text || "");
+      lang = (tokenOrCode.lang || "plain").split(/\s+/)[0];
+    } else {
+      // Legacy signature fallback
+      code = String(tokenOrCode || "");
+      lang = (infostring || "plain").split(/\s+/)[0];
+    }
+
+    // Highlight using highlight.js
+    const hasLang = hljs.getLanguage(lang);
+    const validLang = hasLang ? lang : "plaintext";
+    const highlighted = hljs.highlight(code, { language: validLang }).value;
+
+    // Icons
+    const chevronIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-chevron"><polyline points="18 15 12 9 6 15"></polyline></svg>`;
+    const copyIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>`;
+
+    return `
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">${lang}</span>
+          <div class="code-actions">
+            <button class="code-btn code-toggle" type="button">
+              ${chevronIcon}
+              <span class="btn-text">Collapse</span>
+            </button>
+            <button class="code-btn code-copy" type="button">
+              ${copyIcon}
+              <span class="btn-text">Copy</span>
+            </button>
+          </div>
+        </div>
+        <div class="code-content">
+          <pre><code class="hljs language-${validLang}">${highlighted}</code></pre>
+        </div>
+      </div>
+    `;
+  },
+};
+
+marked.use({ renderer });
 
 let hooksInstalled = false;
 const MARKDOWN_CHAR_LIMIT = 140_000;
@@ -109,6 +191,7 @@ export function toSanitizedMarkdownHtml(markdown: string): string {
 }
 
 function escapeHtml(value: string): string {
+  if (typeof value !== "string") return String(value || "");
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

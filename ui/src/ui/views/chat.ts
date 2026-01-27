@@ -48,6 +48,7 @@ export type ChatProps = {
   // Sidebar state
   sidebarOpen?: boolean;
   sidebarContent?: string | null;
+  sidebarLanguage?: string;
   sidebarError?: string | null;
   splitRatio?: number;
   assistantName: string;
@@ -64,6 +65,8 @@ export type ChatProps = {
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
   onOpenSidebar?: (content: string) => void;
+  onSidebarContentChange?: (content: string) => void;
+  onSidebarLanguageChange?: (language: string) => void;
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
@@ -197,12 +200,104 @@ export function renderChat(props: ChatProps) {
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
+
+  // Global handler for code block interactions (Collapse/Copy)
+  const handleCodeBlockClick = (e: MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const btn = target.closest(".code-btn");
+    if (!btn) return;
+
+    // Toggle Collapse
+    if (btn.classList.contains("code-toggle")) {
+      const block = btn.closest(".code-block");
+      const content = block?.querySelector(".code-content");
+      const icon = btn.querySelector(".icon-chevron");
+      const text = btn.querySelector(".btn-text");
+      
+      if (block && content && icon && text) {
+        const isCollapsed = content.classList.toggle("collapsed");
+        text.textContent = isCollapsed ? "Expand" : "Collapse";
+        icon.innerHTML = isCollapsed 
+          ? '<polyline points="6 9 12 15 18 9"></polyline>' // Down arrow (expand)
+          : '<polyline points="18 15 12 9 6 15"></polyline>'; // Up arrow (collapse)
+      }
+    }
+
+    // Copy Code
+    if (btn.classList.contains("code-copy")) {
+      const block = btn.closest(".code-block");
+      const code = block?.querySelector("code")?.innerText;
+      if (code) {
+        // Fallback for non-secure contexts (e.g. http://ai.local) where clipboard API is missing
+        if (!navigator.clipboard) {
+            const textArea = document.createElement("textarea");
+            textArea.value = code;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                const text = btn.querySelector(".btn-text");
+                if (text) {
+                    const original = text.textContent;
+                    text.textContent = "Copied!";
+                    setTimeout(() => { text.textContent = original; }, 2000);
+                }
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+            }
+            document.body.removeChild(textArea);
+            return;
+        }
+
+        navigator.clipboard.writeText(code).then(() => {
+            const text = btn.querySelector(".btn-text");
+            if (text) {
+                const original = text.textContent;
+                text.textContent = "Copied!";
+                setTimeout(() => { text.textContent = original; }, 2000);
+            }
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+        });
+      }
+    }
+  };
+
   const thread = html`
+    <style>
+      /* Grok-style Code Block Styles */
+      .code-block { margin: 12px 0; background: #f9f9f9; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, rgba(0,0,0,0.1)); font-size: 13px; }
+      .code-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #f0f0f0; border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.05)); color: #666; font-family: sans-serif; }
+      .code-lang { font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+      .code-actions { display: flex; gap: 8px; }
+      .code-btn { appearance: none; background: transparent; border: none; color: #555; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 12px; transition: background 0.2s; }
+      .code-btn:hover { background: rgba(0,0,0,0.05); color: #000; }
+      .code-content { position: relative; overflow: hidden; transition: max-height 0.3s ease; background: #fff; }
+      .code-content pre { margin: 0; padding: 12px; overflow-x: auto; border: none; background: transparent; }
+      
+      /* Collapsed State */
+      .code-content.collapsed { max-height: 80px; }
+      .code-content.collapsed::after { content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 40px; background: linear-gradient(transparent, #fff); pointer-events: none; }
+      
+      /* Dark mode overrides (if applicable via CSS vars) */
+      @media (prefers-color-scheme: dark) {
+        .code-block { background: #1a1a1a; border-color: #333; }
+        .code-header { background: #252525; border-color: #333; color: #aaa; }
+        .code-content { background: #111; }
+        .code-content.collapsed::after { background: linear-gradient(transparent, #111); }
+        .code-btn { color: #aaa; }
+        .code-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+      }
+    </style>
     <div
       class="chat-thread"
       role="log"
       aria-live="polite"
       @scroll=${props.onChatScroll}
+      @click=${handleCodeBlockClick}
     >
       ${props.loading ? html`<div class="muted">Loading chat…</div>` : nothing}
       ${repeat(buildChatItems(props), (item) => item.key, (item) => {
@@ -279,11 +374,22 @@ export function renderChat(props: ChatProps) {
               <div class="chat-sidebar">
                 ${renderMarkdownSidebar({
                   content: props.sidebarContent ?? null,
+                  language: props.sidebarLanguage ?? "javascript",
                   error: props.sidebarError ?? null,
                   onClose: props.onCloseSidebar!,
                   onViewRawText: () => {
                     if (!props.sidebarContent || !props.onOpenSidebar) return;
                     props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
+                  },
+                  onContentChange: props.onSidebarContentChange,
+                  onLanguageChange: props.onSidebarLanguageChange,
+                  onSend: () => {
+                    if (!props.sidebarContent) return;
+                    const lang = props.sidebarLanguage || "plaintext";
+                    const fenced = `\`\`\`${lang}\n${props.sidebarContent}\n\`\`\``;
+                    props.onDraftChange(fenced);
+                    props.onSend();
+                    props.onCloseSidebar?.();
                   },
                 })}
               </div>
@@ -328,22 +434,56 @@ export function renderChat(props: ChatProps) {
             <span>Message</span>
             <textarea
               .value=${props.draft}
+              style="max-height: 50vh; overflow-y: hidden;"
               ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
                 if (e.key !== "Enter") return;
                 if (e.isComposing || e.keyCode === 229) return;
                 if (e.shiftKey) return; // Allow Shift+Enter for line breaks
                 if (!props.connected) return;
+
+                const el = e.target as HTMLTextAreaElement;
+                const val = el.value;
+                
+                // Snippet Mode Trigger: ``` + Enter
+                if (/(?:^|\n)\s*```\s*$/.test(val)) {
+                  e.preventDefault();
+                  const newDraft = val.replace(/(?:^|\n)\s*```\s*$/, "").trim();
+                  props.onDraftChange(newDraft);
+                  if (props.onOpenSidebar) {
+                    props.onOpenSidebar("");
+                  }
+                  return;
+                }
+
                 e.preventDefault();
                 if (canCompose) props.onSend();
               }}
-              @input=${(e: Event) =>
-                props.onDraftChange((e.target as HTMLTextAreaElement).value)}
+              @input=${(e: Event) => {
+                const el = e.target as HTMLTextAreaElement;
+                props.onDraftChange(el.value);
+                // Auto-expand
+                el.style.height = "auto";
+                el.style.height = `${el.scrollHeight}px`;
+              }}
               @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
               placeholder=${composePlaceholder}
             ></textarea>
           </label>
           <div class="chat-compose__actions">
+            <button
+              class="btn"
+              title="Open Snippet Editor"
+              aria-label="Snippet Editor"
+              @click=${() => {
+                if (props.onOpenSidebar) {
+                  props.onDraftChange(""); // Clear any drafted ticks
+                  props.onOpenSidebar(""); 
+                }
+              }}
+            >
+              ${icons.code}
+            </button>
             <button
               class="btn"
               ?disabled=${!props.connected || (!canAbort && props.sending)}
