@@ -493,7 +493,16 @@ export function renderApp(state: AppViewState) {
               sidebarLanguage: state.sidebarLanguage,
               sidebarError: state.sidebarError,
               splitRatio: state.splitRatio,
-              onOpenSidebar: (content: string, mode?: "view" | "edit") => state.handleOpenSidebar(content, mode),
+              onOpenSidebar: (content: string, mode?: "view" | "edit") => {
+                // Heuristic: Auto-detect language for edit mode if not explicitly set
+                if (mode === "edit" && !state.sidebarLanguage) {
+                    if (content.trim().startsWith("{")) state.handleSidebarLanguageChange("json");
+                    else if (content.includes("import ") || content.includes("const ")) state.handleSidebarLanguageChange("javascript");
+                    else if (content.includes("def ") || content.includes("import ")) state.handleSidebarLanguageChange("python");
+                    else state.handleSidebarLanguageChange("plaintext");
+                }
+                state.handleOpenSidebar(content, mode);
+              },
               onSidebarContentChange: (content: string) => state.handleSidebarContentChange(content),
               onSidebarLanguageChange: (language: string) => state.handleSidebarLanguageChange(language),
               onCloseSidebar: () => state.handleCloseSidebar(),

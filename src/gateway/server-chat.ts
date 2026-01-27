@@ -105,6 +105,8 @@ export type AgentEventHandlerOptions = {
   clearAgentRunContext: (runId: string) => void;
 };
 
+import { WatchdogService } from "./watchdog.js";
+
 export function createAgentEventHandler({
   broadcast,
   nodeSendToSession,
@@ -248,6 +250,7 @@ export function createAgentEventHandler({
             evt.data?.error,
           );
         }
+        WatchdogService.scheduleCheck(sessionKey);
       } else if (isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
         chatRunState.abortedRuns.delete(clientRunId);
         chatRunState.abortedRuns.delete(evt.runId);

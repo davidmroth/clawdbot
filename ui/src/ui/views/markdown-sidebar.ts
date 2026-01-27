@@ -36,8 +36,8 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
   const isToolOutput = props.mode !== "edit";
   
   return html`
-    <div class="sidebar-panel">
-      <div class="sidebar-header">
+    <div class="sidebar-panel" style="height: 100%; display: flex; flex-direction: column; overflow: hidden;">
+      <div class="sidebar-header" style="flex: 0 0 auto;">
         <div class="sidebar-title">${isToolOutput ? "Tool Output" : "Snippet Editor"}</div>
         ${!isToolOutput && props.onLanguageChange
           ? html`
@@ -62,7 +62,7 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
           ${icons.x}
         </button>
       </div>
-      <div class="sidebar-content" style="padding: 0; overflow: hidden; display: flex; flex-direction: column;">
+      <div class="sidebar-content" style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; position: relative;">
         ${props.error
           ? html`
               <div class="callout danger" style="margin: 1rem;">${props.error}</div>
@@ -71,10 +71,14 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
               </button>
             `
           : isToolOutput
-            ? html`<div class="sidebar-markdown" style="padding: 1rem; overflow: auto;">${unsafeHTML(toSanitizedMarkdownHtml(props.content || ""))}</div>`
+            ? html`
+                <div class="sidebar-markdown" style="flex: 1; height: 100%; overflow-y: auto; padding: 1rem; box-sizing: border-box;">
+                  ${unsafeHTML(toSanitizedMarkdownHtml(props.content || ""))}
+                </div>
+              `
             : html`
                 <monaco-editor-wrapper
-                    style="flex: 1; min-height: 0; width: 100%;"
+                    style="flex: 1; width: 100%; height: 100%; min-height: 0; display: block;"
                     .value=${props.content || ""}
                     .language=${props.language || "javascript"}
                     @change=${(e: CustomEvent) => props.onContentChange?.(e.detail)}

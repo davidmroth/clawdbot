@@ -71,6 +71,7 @@ const GROUP_LABELS: Record<string, string> = {
   discovery: "Discovery",
   presence: "Presence",
   voicewake: "Voice Wake",
+  notifications: "Notifications",
 };
 
 const GROUP_ORDER: Record<string, number> = {
@@ -355,6 +356,10 @@ const FIELD_LABELS: Record<string, string> = {
   "plugins.installs.*.installPath": "Plugin Install Path",
   "plugins.installs.*.version": "Plugin Install Version",
   "plugins.installs.*.installedAt": "Plugin Install Time",
+  "notifications.enabled": "Enable Notifications",
+  "notifications.idle_threshold_seconds": "Idle Threshold (seconds)",
+  "notifications.preferred_method": "Preferred Method",
+  "notifications.contact_info": "Contact Info",
 };
 
 const FIELD_HELP: Record<string, string> = {
@@ -659,6 +664,10 @@ const FIELD_HELP: Record<string, string> = {
   "channels.discord.maxLinesPerMessage": "Soft max line count per Discord message (default: 17).",
   "channels.slack.dm.policy":
     'Direct message access control ("pairing" recommended). "open" requires channels.slack.dm.allowFrom=["*"].',
+  "notifications.enabled": "Enable global idle notifications.",
+  "notifications.idle_threshold_seconds": "Seconds of inactivity before triggering a notification check.",
+  "notifications.preferred_method": "Method to use for notification (e.g. 'signal').",
+  "notifications.contact_info": "Contact details for the chosen method (e.g. 'uuid:...' for Signal).",
 };
 
 const FIELD_PLACEHOLDERS: Record<string, string> = {

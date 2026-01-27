@@ -527,6 +527,15 @@ export const ClawdbotSchema = z
       })
       .strict()
       .optional(),
+    notifications: z
+      .object({
+        enabled: z.boolean().optional(),
+        idle_threshold_seconds: z.number().int().positive().optional(),
+        preferred_method: z.string().optional(),
+        contact_info: z.string().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((cfg, ctx) => {

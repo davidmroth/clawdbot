@@ -23,6 +23,7 @@ import {
   resolveChatRunExpiresAtMs,
 } from "../chat-abort.js";
 import { type ChatImageContent, parseMessageWithAttachments } from "../chat-attachments.js";
+import { WatchdogService } from "../watchdog.js";
 import {
   ErrorCodes,
   errorShape,
@@ -369,6 +370,8 @@ export const chatHandlers: GatewayRequestHandlers = {
     });
     const now = Date.now();
     const clientRunId = p.idempotencyKey;
+
+    WatchdogService.cancelCheck(p.sessionKey);
 
     const sendPolicy = resolveSendPolicy({
       cfg,

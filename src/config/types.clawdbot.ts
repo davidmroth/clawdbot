@@ -95,6 +95,12 @@ export type ClawdbotConfig = {
   canvasHost?: CanvasHostConfig;
   talk?: TalkConfig;
   gateway?: GatewayConfig;
+  notifications?: {
+    enabled?: boolean;
+    idle_threshold_seconds?: number;
+    preferred_method?: string;
+    contact_info?: string;
+  };
 };
 
 export type ConfigValidationIssue = {

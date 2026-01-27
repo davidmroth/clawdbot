@@ -68,6 +68,7 @@ import { startGatewaySidecars } from "./server-startup.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
+import { WatchdogService } from "./watchdog.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
 
@@ -87,6 +88,7 @@ const logReload = log.child("reload");
 const logHooks = log.child("hooks");
 const logPlugins = log.child("plugins");
 const logWsControl = log.child("ws");
+const logWatchdog = log.child("watchdog");
 const canvasRuntime = runtimeForLogger(logCanvas);
 
 export type GatewayServer = {
@@ -216,6 +218,7 @@ export async function startGatewayServer(
   }
   setGatewaySigusr1RestartPolicy({ allowExternal: cfgAtStart.commands?.restart === true });
   initSubagentRegistry();
+  WatchdogService.setLogger(logWatchdog);
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);
   const baseMethods = listGatewayMethods();

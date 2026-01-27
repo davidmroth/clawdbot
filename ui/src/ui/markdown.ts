@@ -76,34 +76,33 @@ const renderer = {
     let code = "";
     let lang = "plain";
 
-    // Handle Marked v5+ object signature
-    if (typeof tokenOrCode === "object" && tokenOrCode !== null && "text" in tokenOrCode) {
-      code = String(tokenOrCode.text || "");
-      lang = (tokenOrCode.lang || "plain").split(/\s+/)[0];
+    // Custom renderer for Grok-style code blocks
+    // Note: We deliberately do NOT use the 'collapsed' logic here anymore for sidebar/tool outputs
+    // to ensure they are always fully visible and scrollable.
+    
+    // Highlight using highlight.js
+    let highlighted;
+    // Auto-detect if generic/plain
+    if (!lang || lang === "plain" || lang === "text" || lang === "plaintext") {
+        const auto = hljs.highlightAuto(code);
+        highlighted = auto.value;
+        // If detection is confident, maybe update lang label?
+        // For now, keep "text" to avoid confusing label jumps, 
+        // but the coloring will be smarter.
     } else {
-      // Legacy signature fallback
-      code = String(tokenOrCode || "");
-      lang = (infostring || "plain").split(/\s+/)[0];
+        const hasLang = hljs.getLanguage(lang);
+        const validLang = hasLang ? lang : "plaintext";
+        highlighted = hljs.highlight(code, { language: validLang }).value;
     }
 
-    // Highlight using highlight.js
-    const hasLang = hljs.getLanguage(lang);
-    const validLang = hasLang ? lang : "plaintext";
-    const highlighted = hljs.highlight(code, { language: validLang }).value;
-
     // Icons
-    const chevronIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-chevron"><polyline points="18 15 12 9 6 15"></polyline></svg>`;
     const copyIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>`;
 
     return `
       <div class="code-block">
         <div class="code-header">
-          <span class="code-lang">${lang}</span>
+          <span class="code-lang">${lang || "text"}</span>
           <div class="code-actions">
-            <button class="code-btn code-toggle" type="button">
-              ${chevronIcon}
-              <span class="btn-text">Collapse</span>
-            </button>
             <button class="code-btn code-copy" type="button">
               ${copyIcon}
               <span class="btn-text">Copy</span>
@@ -111,7 +110,7 @@ const renderer = {
           </div>
         </div>
         <div class="code-content">
-          <pre><code class="hljs language-${validLang}">${highlighted}</code></pre>
+          <pre><code class="hljs">${highlighted}</code></pre>
         </div>
       </div>
     `;
