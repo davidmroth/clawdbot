@@ -5,7 +5,10 @@ import type { AssistantIdentity } from "../assistant-identity";
 import { toSanitizedMarkdownHtml } from "../markdown";
 import type { MessageGroup } from "../types/chat-types";
 import { renderCopyAsMarkdownButton } from "./copy-as-markdown";
-import { isToolResultMessage, normalizeRoleForGrouping } from "./message-normalizer";
+import {
+  isToolResultMessage,
+  normalizeRoleForGrouping,
+} from "./message-normalizer";
 import {
   extractTextCached,
   extractThinkingCached,
@@ -108,6 +111,7 @@ export function renderMessageGroup(
   group: MessageGroup,
   opts: {
     onOpenSidebar?: (content: string) => void;
+    onSelectReplyTo?: (message: unknown) => void;
     showReasoning: boolean;
     assistantName?: string;
     assistantAvatar?: string | null;
@@ -148,6 +152,7 @@ export function renderMessageGroup(
               showReasoning: opts.showReasoning,
             },
             opts.onOpenSidebar,
+            opts.onSelectReplyTo,
           ),
         )}
         <div class="chat-group-footer">
@@ -179,7 +184,7 @@ function renderAvatar(
       ? "user"
       : normalized === "assistant"
         ? "assistant"
-      : normalized === "tool"
+        : normalized === "tool"
           ? "tool"
           : "other";
 
@@ -228,6 +233,7 @@ function renderGroupedMessage(
   message: unknown,
   opts: { isStreaming: boolean; showReasoning: boolean },
   onOpenSidebar?: (content: string) => void,
+  onSelectReplyTo?: (message: unknown) => void,
 ) {
   const m = message as Record<string, unknown>;
   const role = typeof m.role === "string" ? m.role : "unknown";
@@ -254,6 +260,7 @@ function renderGroupedMessage(
     : null;
   const markdown = markdownBase;
   const canCopyMarkdown = role === "assistant" && Boolean(markdown?.trim());
+  const canReply = !isToolResult && (role === "user" || role === "assistant");
 
   const bubbleClasses = [
     "chat-bubble",
@@ -275,14 +282,27 @@ function renderGroupedMessage(
   return html`
     <div class="${bubbleClasses}">
       ${canCopyMarkdown ? renderCopyAsMarkdownButton(markdown!) : nothing}
+      ${canReply && onSelectReplyTo
+        ? html`<button
+            class="chat-bubble__reply-btn"
+            type="button"
+            aria-label="Reply to this message"
+            title="Reply"
+            @click=${() => onSelectReplyTo(message)}
+          >
+            ↩
+          </button>`
+        : nothing}
       ${renderMessageImages(images)}
       ${reasoningMarkdown
-        ? html`<div class="chat-thinking">${unsafeHTML(
-            toSanitizedMarkdownHtml(reasoningMarkdown),
-          )}</div>`
+        ? html`<div class="chat-thinking">
+            ${unsafeHTML(toSanitizedMarkdownHtml(reasoningMarkdown))}
+          </div>`
         : nothing}
       ${markdown
-        ? html`<div class="chat-text">${unsafeHTML(toSanitizedMarkdownHtml(markdown))}</div>`
+        ? html`<div class="chat-text">
+            ${unsafeHTML(toSanitizedMarkdownHtml(markdown))}
+          </div>`
         : nothing}
       ${toolCards.map((card) => renderToolCardSidebar(card, onOpenSidebar))}
     </div>

@@ -13,6 +13,7 @@ import {
   renderReadingIndicatorGroup,
   renderStreamingGroup,
 } from "../chat/grouped-render";
+import { extractText, truncateText } from "../chat/message-extract";
 import { renderMarkdownSidebar } from "./markdown-sidebar";
 import "../components/resizable-divider";
 
@@ -71,17 +72,25 @@ export type ChatProps = {
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
+  // Reply-to-message
+  replyToMessage?: unknown | null;
+  onSelectReplyTo?: (message: unknown) => void;
+  onClearReplyTo?: () => void;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
 
-function renderCompactionIndicator(status: CompactionIndicatorStatus | null | undefined) {
+function renderCompactionIndicator(
+  status: CompactionIndicatorStatus | null | undefined,
+) {
   if (!status) return nothing;
 
   // Show "compacting..." while active
   if (status.active) {
     return html`
-      <div class="callout info compaction-indicator compaction-indicator--active">
+      <div
+        class="callout info compaction-indicator compaction-indicator--active"
+      >
         ${icons.loader} Compacting context...
       </div>
     `;
@@ -92,7 +101,9 @@ function renderCompactionIndicator(status: CompactionIndicatorStatus | null | un
     const elapsed = Date.now() - status.completedAt;
     if (elapsed < COMPACTION_TOAST_DURATION_MS) {
       return html`
-        <div class="callout success compaction-indicator compaction-indicator--complete">
+        <div
+          class="callout success compaction-indicator compaction-indicator--complete"
+        >
           ${icons.check} Context compacted
         </div>
       `;
@@ -106,10 +117,7 @@ function generateAttachmentId(): string {
   return `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function handlePaste(
-  e: ClipboardEvent,
-  props: ChatProps,
-) {
+function handlePaste(e: ClipboardEvent, props: ChatProps) {
   const items = e.clipboardData?.items;
   if (!items || !props.onAttachmentsChange) return;
 
@@ -178,6 +186,34 @@ function renderAttachmentPreview(props: ChatProps) {
   `;
 }
 
+function renderReplyIndicator(props: ChatProps) {
+  if (!props.replyToMessage) return nothing;
+
+  const replyText = extractText(props.replyToMessage) ?? "";
+  const preview = truncateText(replyText, 80);
+  const role = (props.replyToMessage as Record<string, unknown>).role;
+  const isUser = role === "user";
+
+  return html`
+    <div class="chat-reply-indicator">
+      <div class="chat-reply-indicator__content">
+        <span class="chat-reply-indicator__label">
+          Replying to ${isUser ? "yourself" : props.assistantName}
+        </span>
+        <span class="chat-reply-indicator__preview">${preview}</span>
+      </div>
+      <button
+        class="chat-reply-indicator__close"
+        type="button"
+        aria-label="Cancel reply"
+        @click=${() => props.onClearReplyTo?.()}
+      >
+        ${icons.x}
+      </button>
+    </div>
+  `;
+}
+
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
   const isBusy = props.sending || props.stream !== null;
@@ -231,38 +267,45 @@ export function renderChat(props: ChatProps) {
       if (code) {
         // Fallback for non-secure contexts (e.g. http://ai.local) where clipboard API is missing
         if (!navigator.clipboard) {
-            const textArea = document.createElement("textarea");
-            textArea.value = code;
-            textArea.style.position = "fixed";
-            textArea.style.left = "-9999px";
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                const text = btn.querySelector(".btn-text");
-                if (text) {
-                    const original = text.textContent;
-                    text.textContent = "Copied!";
-                    setTimeout(() => { text.textContent = original; }, 2000);
-                }
-            } catch (err) {
-                console.error('Fallback: Oops, unable to copy', err);
-            }
-            document.body.removeChild(textArea);
-            return;
-        }
-
-        navigator.clipboard.writeText(code).then(() => {
+          const textArea = document.createElement("textarea");
+          textArea.value = code;
+          textArea.style.position = "fixed";
+          textArea.style.left = "-9999px";
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          try {
+            document.execCommand("copy");
             const text = btn.querySelector(".btn-text");
             if (text) {
-                const original = text.textContent;
-                text.textContent = "Copied!";
-                setTimeout(() => { text.textContent = original; }, 2000);
+              const original = text.textContent;
+              text.textContent = "Copied!";
+              setTimeout(() => {
+                text.textContent = original;
+              }, 2000);
             }
-        }).catch(err => {
-            console.error('Failed to copy: ', err);
-        });
+          } catch (err) {
+            console.error("Fallback: Oops, unable to copy", err);
+          }
+          document.body.removeChild(textArea);
+          return;
+        }
+
+        navigator.clipboard
+          .writeText(code)
+          .then(() => {
+            const text = btn.querySelector(".btn-text");
+            if (text) {
+              const original = text.textContent;
+              text.textContent = "Copied!";
+              setTimeout(() => {
+                text.textContent = original;
+              }, 2000);
+            }
+          })
+          .catch((err) => {
+            console.error("Failed to copy: ", err);
+          });
       }
     }
   };
@@ -270,27 +313,105 @@ export function renderChat(props: ChatProps) {
   const thread = html`
     <style>
       /* Grok-style Code Block Styles */
-      .code-block { margin: 12px 0; background: #f9f9f9; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color, rgba(0,0,0,0.1)); font-size: 13px; }
-      .code-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #f0f0f0; border-bottom: 1px solid var(--border-color, rgba(0,0,0,0.05)); color: #666; font-family: sans-serif; }
-      .code-lang { font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
-      .code-actions { display: flex; gap: 8px; }
-      .code-btn { appearance: none; background: transparent; border: none; color: #555; cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; font-size: 12px; transition: background 0.2s; }
-      .code-btn:hover { background: rgba(0,0,0,0.05); color: #000; }
-      .code-content { position: relative; overflow: hidden; transition: max-height 0.3s ease; background: #fff; }
-      .code-content pre { margin: 0; padding: 12px; overflow-x: auto; border: none; background: transparent; }
+      .code-block {
+        margin: 12px 0;
+        background: #f9f9f9;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+        font-size: 13px;
+      }
+      .code-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 12px;
+        background: #f0f0f0;
+        border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.05));
+        color: #666;
+        font-family: sans-serif;
+      }
+      .code-lang {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+      }
+      .code-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .code-btn {
+        appearance: none;
+        background: transparent;
+        border: none;
+        color: #555;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        transition: background 0.2s;
+      }
+      .code-btn:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: #000;
+      }
+      .code-content {
+        position: relative;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+        background: #fff;
+      }
+      .code-content pre {
+        margin: 0;
+        padding: 12px;
+        overflow-x: auto;
+        border: none;
+        background: transparent;
+      }
 
       /* Collapsed State */
-      .code-content.collapsed { max-height: 80px; }
-      .code-content.collapsed::after { content: ""; position: absolute; bottom: 0; left: 0; width: 100%; height: 40px; background: linear-gradient(transparent, #fff); pointer-events: none; }
+      .code-content.collapsed {
+        max-height: 80px;
+      }
+      .code-content.collapsed::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 40px;
+        background: linear-gradient(transparent, #fff);
+        pointer-events: none;
+      }
 
       /* Dark mode overrides (if applicable via CSS vars) */
       @media (prefers-color-scheme: dark) {
-        .code-block { background: #1a1a1a; border-color: #333; }
-        .code-header { background: #252525; border-color: #333; color: #aaa; }
-        .code-content { background: #111; }
-        .code-content.collapsed::after { background: linear-gradient(transparent, #111); }
-        .code-btn { color: #aaa; }
-        .code-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .code-block {
+          background: #1a1a1a;
+          border-color: #333;
+        }
+        .code-header {
+          background: #252525;
+          border-color: #333;
+          color: #aaa;
+        }
+        .code-content {
+          background: #111;
+        }
+        .code-content.collapsed::after {
+          background: linear-gradient(transparent, #111);
+        }
+        .code-btn {
+          color: #aaa;
+        }
+        .code-btn:hover {
+          background: rgba(255, 255, 255, 0.1);
+          color: #fff;
+        }
       }
     </style>
     <div
@@ -301,31 +422,36 @@ export function renderChat(props: ChatProps) {
       @click=${handleCodeBlockClick}
     >
       ${props.loading ? html`<div class="muted">Loading chat…</div>` : nothing}
-      ${repeat(buildChatItems(props), (item) => item.key, (item) => {
-        if (item.kind === "reading-indicator") {
-          return renderReadingIndicatorGroup(assistantIdentity);
-        }
+      ${repeat(
+        buildChatItems(props),
+        (item) => item.key,
+        (item) => {
+          if (item.kind === "reading-indicator") {
+            return renderReadingIndicatorGroup(assistantIdentity);
+          }
 
-        if (item.kind === "stream") {
-          return renderStreamingGroup(
-            item.text,
-            item.startedAt,
-            props.onOpenSidebar,
-            assistantIdentity,
-          );
-        }
+          if (item.kind === "stream") {
+            return renderStreamingGroup(
+              item.text,
+              item.startedAt,
+              props.onOpenSidebar,
+              assistantIdentity,
+            );
+          }
 
-        if (item.kind === "group") {
-          return renderMessageGroup(item, {
-            onOpenSidebar: props.onOpenSidebar,
-            showReasoning,
-            assistantName: props.assistantName,
-            assistantAvatar: assistantIdentity.avatar,
-          });
-        }
+          if (item.kind === "group") {
+            return renderMessageGroup(item, {
+              onOpenSidebar: props.onOpenSidebar,
+              onSelectReplyTo: props.onSelectReplyTo,
+              showReasoning,
+              assistantName: props.assistantName,
+              assistantAvatar: assistantIdentity.avatar,
+            });
+          }
 
-        return nothing;
-      })}
+          return nothing;
+        },
+      )}
     </div>
   `;
 
@@ -334,13 +460,10 @@ export function renderChat(props: ChatProps) {
       ${props.disabledReason
         ? html`<div class="callout">${props.disabledReason}</div>`
         : nothing}
-
       ${props.error
         ? html`<div class="callout danger">${props.error}</div>`
         : nothing}
-
       ${renderCompactionIndicator(props.compactionStatus)}
-
       ${props.focusMode
         ? html`
             <button
@@ -356,7 +479,9 @@ export function renderChat(props: ChatProps) {
         : nothing}
 
       <div
-        class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}"
+        class="chat-split-container ${sidebarOpen
+          ? "chat-split-container--open"
+          : ""}"
       >
         <div
           class="chat-main"
@@ -402,7 +527,9 @@ export function renderChat(props: ChatProps) {
       ${props.queue.length
         ? html`
             <div class="chat-queue" role="status" aria-live="polite">
-              <div class="chat-queue__title">Queued (${props.queue.length})</div>
+              <div class="chat-queue__title">
+                Queued (${props.queue.length})
+              </div>
               <div class="chat-queue__list">
                 ${props.queue.map(
                   (item) => html`
@@ -430,7 +557,7 @@ export function renderChat(props: ChatProps) {
         : nothing}
 
       <div class="chat-compose">
-        ${renderAttachmentPreview(props)}
+        ${renderReplyIndicator(props)} ${renderAttachmentPreview(props)}
         <div class="chat-compose__row">
           <label class="field chat-compose__field">
             <span>Message</span>
@@ -480,7 +607,7 @@ export function renderChat(props: ChatProps) {
               @click=${() => {
                 if (props.onOpenSidebar) {
                   props.onDraftChange(""); // Clear any drafted ticks
-                  props.onOpenSidebar("", "edit"); 
+                  props.onOpenSidebar("", "edit");
                 }
               }}
             >

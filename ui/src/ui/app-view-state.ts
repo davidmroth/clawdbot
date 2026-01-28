@@ -57,6 +57,7 @@ export type AppViewState = {
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  replyToMessage: unknown | null;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
   devicesLoading: boolean;
@@ -158,13 +159,21 @@ export type AppViewState = {
   handleWhatsAppLogout: () => Promise<void>;
   handleChannelConfigSave: () => Promise<void>;
   handleChannelConfigReload: () => Promise<void>;
-  handleNostrProfileEdit: (accountId: string, profile: NostrProfile | null) => void;
+  handleNostrProfileEdit: (
+    accountId: string,
+    profile: NostrProfile | null,
+  ) => void;
   handleNostrProfileCancel: () => void;
-  handleNostrProfileFieldChange: (field: keyof NostrProfile, value: string) => void;
+  handleNostrProfileFieldChange: (
+    field: keyof NostrProfile,
+    value: string,
+  ) => void;
   handleNostrProfileSave: () => Promise<void>;
   handleNostrProfileImport: () => Promise<void>;
   handleNostrProfileToggleAdvanced: () => void;
-  handleExecApprovalDecision: (decision: "allow-once" | "allow-always" | "deny") => Promise<void>;
+  handleExecApprovalDecision: (
+    decision: "allow-once" | "allow-always" | "deny",
+  ) => Promise<void>;
   handleConfigLoad: () => Promise<void>;
   handleConfigSave: () => Promise<void>;
   handleConfigApply: () => Promise<void>;
@@ -203,4 +212,6 @@ export type AppViewState = {
   handleLogsLevelFilterToggle: (level: LogLevel) => void;
   handleLogsAutoFollowToggle: (next: boolean) => void;
   handleCallDebugMethod: (method: string, params: string) => Promise<void>;
+  handleSelectReplyTo: (message: unknown) => void;
+  handleClearReplyTo: () => void;
 };

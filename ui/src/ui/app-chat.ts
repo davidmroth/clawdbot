@@ -1,4 +1,8 @@
-import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/chat";
+import {
+  abortChatRun,
+  loadChatHistory,
+  sendChatMessage,
+} from "./controllers/chat";
 import { loadSessions } from "./controllers/sessions";
 import { generateUUID } from "./uuid";
 import { resetToolStream } from "./app-tool-stream";
@@ -9,6 +13,7 @@ import type { GatewayHelloOk } from "./gateway";
 import { parseAgentSessionKey } from "../../../src/sessions/session-key-utils.js";
 import type { ClawdbotApp } from "./app";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types";
+import { extractText } from "./chat/message-extract";
 
 type ChatHost = {
   connected: boolean;
@@ -21,6 +26,7 @@ type ChatHost = {
   basePath: string;
   hello: GatewayHelloOk | null;
   chatAvatarUrl: string | null;
+  replyToMessage: unknown | null;
 };
 
 export function isChatBusy(host: ChatHost) {
@@ -47,7 +53,11 @@ export async function handleAbortChat(host: ChatHost) {
   await abortChatRun(host as unknown as ClawdbotApp);
 }
 
-function enqueueChatMessage(host: ChatHost, text: string, attachments?: ChatAttachment[]) {
+function enqueueChatMessage(
+  host: ChatHost,
+  text: string,
+  attachments?: ChatAttachment[],
+) {
   const trimmed = text.trim();
   const hasAttachments = Boolean(attachments && attachments.length > 0);
   if (!trimmed && !hasAttachments) return;
@@ -57,7 +67,9 @@ function enqueueChatMessage(host: ChatHost, text: string, attachments?: ChatAtta
       id: generateUUID(),
       text: trimmed,
       createdAt: Date.now(),
-      attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
+      attachments: hasAttachments
+        ? attachments?.map((att) => ({ ...att }))
+        : undefined,
     },
   ];
 }
@@ -74,7 +86,11 @@ async function sendChatMessageNow(
   },
 ) {
   resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
-  const ok = await sendChatMessage(host as unknown as ClawdbotApp, message, opts?.attachments);
+  const ok = await sendChatMessage(
+    host as unknown as ClawdbotApp,
+    message,
+    opts?.attachments,
+  );
   if (!ok && opts?.previousDraft != null) {
     host.chatMessage = opts.previousDraft;
   }
@@ -82,7 +98,10 @@ async function sendChatMessageNow(
     host.chatAttachments = opts.previousAttachments;
   }
   if (ok) {
-    setLastActiveSessionKey(host as unknown as Parameters<typeof setLastActiveSessionKey>[0], host.sessionKey);
+    setLastActiveSessionKey(
+      host as unknown as Parameters<typeof setLastActiveSessionKey>[0],
+      host.sessionKey,
+    );
   }
   if (ok && opts?.restoreDraft && opts.previousDraft?.trim()) {
     host.chatMessage = opts.previousDraft;
@@ -90,7 +109,9 @@ async function sendChatMessageNow(
   if (ok && opts?.restoreAttachments && opts.previousAttachments?.length) {
     host.chatAttachments = opts.previousAttachments;
   }
-  scheduleChatScroll(host as unknown as Parameters<typeof scheduleChatScroll>[0]);
+  scheduleChatScroll(
+    host as unknown as Parameters<typeof scheduleChatScroll>[0],
+  );
   if (ok && !host.chatRunId) {
     void flushChatQueue(host);
   }
@@ -102,7 +123,9 @@ async function flushChatQueue(host: ChatHost) {
   const [next, ...rest] = host.chatQueue;
   if (!next) return;
   host.chatQueue = rest;
-  const ok = await sendChatMessageNow(host, next.text, { attachments: next.attachments });
+  const ok = await sendChatMessageNow(host, next.text, {
+    attachments: next.attachments,
+  });
   if (!ok) {
     host.chatQueue = [next, ...host.chatQueue];
   }
@@ -119,7 +142,7 @@ export async function handleSendChat(
 ) {
   if (!host.connected) return;
   const previousDraft = host.chatMessage;
-  const message = (messageOverride ?? host.chatMessage).trim();
+  let message = (messageOverride ?? host.chatMessage).trim();
   const attachments = host.chatAttachments ?? [];
   const attachmentsToSend = messageOverride == null ? attachments : [];
   const hasAttachments = attachmentsToSend.length > 0;
@@ -130,6 +153,21 @@ export async function handleSendChat(
   if (isChatStopCommand(message)) {
     await handleAbortChat(host);
     return;
+  }
+
+  // Prepend quoted reply if replying to a message
+  if (host.replyToMessage && messageOverride == null) {
+    const replyText = extractText(host.replyToMessage);
+    if (replyText?.trim()) {
+      const quotedLines = replyText
+        .trim()
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n");
+      message = `${quotedLines}\n\n${message}`;
+    }
+    // Clear reply after capturing the quote
+    host.replyToMessage = null;
   }
 
   if (messageOverride == null) {
@@ -158,7 +196,10 @@ export async function refreshChat(host: ChatHost) {
     loadSessions(host as unknown as ClawdbotApp),
     refreshChatAvatar(host),
   ]);
-  scheduleChatScroll(host as unknown as Parameters<typeof scheduleChatScroll>[0], true);
+  scheduleChatScroll(
+    host as unknown as Parameters<typeof scheduleChatScroll>[0],
+    true,
+  );
 }
 
 export const flushChatQueueForEvent = flushChatQueue;
@@ -170,7 +211,9 @@ type SessionDefaultsSnapshot = {
 function resolveAgentIdForSession(host: ChatHost): string | null {
   const parsed = parseAgentSessionKey(host.sessionKey);
   if (parsed?.agentId) return parsed.agentId;
-  const snapshot = host.hello?.snapshot as { sessionDefaults?: SessionDefaultsSnapshot } | undefined;
+  const snapshot = host.hello?.snapshot as
+    | { sessionDefaults?: SessionDefaultsSnapshot }
+    | undefined;
   const fallback = snapshot?.sessionDefaults?.defaultAgentId?.trim();
   return fallback || "main";
 }
@@ -178,7 +221,9 @@ function resolveAgentIdForSession(host: ChatHost): string | null {
 function buildAvatarMetaUrl(basePath: string, agentId: string): string {
   const base = normalizeBasePath(basePath);
   const encoded = encodeURIComponent(agentId);
-  return base ? `${base}/avatar/${encoded}?meta=1` : `/avatar/${encoded}?meta=1`;
+  return base
+    ? `${base}/avatar/${encoded}?meta=1`
+    : `/avatar/${encoded}?meta=1`;
 }
 
 export async function refreshChatAvatar(host: ChatHost) {
@@ -200,7 +245,8 @@ export async function refreshChatAvatar(host: ChatHost) {
       return;
     }
     const data = (await res.json()) as { avatarUrl?: unknown };
-    const avatarUrl = typeof data.avatarUrl === "string" ? data.avatarUrl.trim() : "";
+    const avatarUrl =
+      typeof data.avatarUrl === "string" ? data.avatarUrl.trim() : "";
     host.chatAvatarUrl = avatarUrl || null;
   } catch {
     host.chatAvatarUrl = null;

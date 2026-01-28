@@ -38,25 +38,33 @@ export function extractText(message: unknown): string | null {
   const role = typeof m.role === "string" ? m.role : "";
   const content = m.content;
   if (typeof content === "string") {
-    const processed = role === "assistant" ? stripThinkingTags(content) : stripEnvelope(content);
+    const processed =
+      role === "assistant"
+        ? stripThinkingTags(content)
+        : stripEnvelope(content);
     return processed;
   }
   if (Array.isArray(content)) {
     const parts = content
       .map((p) => {
         const item = p as Record<string, unknown>;
-        if (item.type === "text" && typeof item.text === "string") return item.text;
+        if (item.type === "text" && typeof item.text === "string")
+          return item.text;
         return null;
       })
       .filter((v): v is string => typeof v === "string");
     if (parts.length > 0) {
       const joined = parts.join("\n");
-      const processed = role === "assistant" ? stripThinkingTags(joined) : stripEnvelope(joined);
+      const processed =
+        role === "assistant"
+          ? stripThinkingTags(joined)
+          : stripEnvelope(joined);
       return processed;
     }
   }
   if (typeof m.text === "string") {
-    const processed = role === "assistant" ? stripThinkingTags(m.text) : stripEnvelope(m.text);
+    const processed =
+      role === "assistant" ? stripThinkingTags(m.text) : stripEnvelope(m.text);
     return processed;
   }
   return null;
@@ -94,9 +102,7 @@ export function extractThinking(message: unknown): string | null {
       /<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi,
     ),
   ];
-  const extracted = matches
-    .map((m) => (m[1] ?? "").trim())
-    .filter(Boolean);
+  const extracted = matches.map((m) => (m[1] ?? "").trim()).filter(Boolean);
   return extracted.length > 0 ? extracted.join("\n") : null;
 }
 
@@ -117,7 +123,8 @@ export function extractRawText(message: unknown): string | null {
     const parts = content
       .map((p) => {
         const item = p as Record<string, unknown>;
-        if (item.type === "text" && typeof item.text === "string") return item.text;
+        if (item.type === "text" && typeof item.text === "string")
+          return item.text;
         return null;
       })
       .filter((v): v is string => typeof v === "string");
@@ -136,4 +143,13 @@ export function formatReasoningMarkdown(text: string): string {
     .filter(Boolean)
     .map((line) => `_${line}_`);
   return lines.length ? ["_Reasoning:_", ...lines].join("\n") : "";
+}
+
+/**
+ * Truncate text to a maximum length, adding ellipsis if needed.
+ */
+export function truncateText(text: string, maxLength: number): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= maxLength) return trimmed;
+  return trimmed.slice(0, maxLength - 1).trim() + "…";
 }

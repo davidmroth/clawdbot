@@ -24,7 +24,11 @@ import type {
   StatusSummary,
   NostrProfile,
 } from "./types";
-import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types";
+import {
+  type ChatAttachment,
+  type ChatQueueItem,
+  type CronFormState,
+} from "./ui-types";
 import type { EventLogEntry } from "./app-events";
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults";
 import type {
@@ -93,7 +97,12 @@ function resolveOnboardingMode(): boolean {
   const raw = params.get("onboarding");
   if (!raw) return false;
   const normalized = raw.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  );
 }
 
 @customElement("clawdbot-app")
@@ -125,11 +134,14 @@ export class ClawdbotApp extends LitElement {
   @state() chatStream: string | null = null;
   @state() chatStreamStartedAt: number | null = null;
   @state() chatRunId: string | null = null;
-  @state() compactionStatus: import("./app-tool-stream").CompactionStatus | null = null;
+  @state() compactionStatus:
+    | import("./app-tool-stream").CompactionStatus
+    | null = null;
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
   @state() chatAttachments: ChatAttachment[] = [];
+  @state() replyToMessage: unknown | null = null;
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
@@ -265,7 +277,8 @@ export class ClawdbotApp extends LitElement {
       this as unknown as Parameters<typeof onPopStateInternal>[0],
     );
   private themeMedia: MediaQueryList | null = null;
-  private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null = null;
+  private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null =
+    null;
   private topbarObserver: ResizeObserver | null = null;
 
   createRenderRoot() {
@@ -278,11 +291,15 @@ export class ClawdbotApp extends LitElement {
   }
 
   protected firstUpdated() {
-    handleFirstUpdated(this as unknown as Parameters<typeof handleFirstUpdated>[0]);
+    handleFirstUpdated(
+      this as unknown as Parameters<typeof handleFirstUpdated>[0],
+    );
   }
 
   disconnectedCallback() {
-    handleDisconnected(this as unknown as Parameters<typeof handleDisconnected>[0]);
+    handleDisconnected(
+      this as unknown as Parameters<typeof handleDisconnected>[0],
+    );
     super.disconnectedCallback();
   }
 
@@ -341,7 +358,10 @@ export class ClawdbotApp extends LitElement {
   }
 
   setTab(next: Tab) {
-    setTabInternal(this as unknown as Parameters<typeof setTabInternal>[0], next);
+    setTabInternal(
+      this as unknown as Parameters<typeof setTabInternal>[0],
+      next,
+    );
   }
 
   setTheme(next: ThemeMode, context?: Parameters<typeof setThemeInternal>[2]) {
@@ -432,7 +452,9 @@ export class ClawdbotApp extends LitElement {
     handleNostrProfileToggleAdvancedInternal(this);
   }
 
-  async handleExecApprovalDecision(decision: "allow-once" | "allow-always" | "deny") {
+  async handleExecApprovalDecision(
+    decision: "allow-once" | "allow-always" | "deny",
+  ) {
     const active = this.execApprovalQueue[0];
     if (!active || !this.client || this.execApprovalBusy) return;
     this.execApprovalBusy = true;
@@ -442,7 +464,9 @@ export class ClawdbotApp extends LitElement {
         id: active.id,
         decision,
       });
-      this.execApprovalQueue = this.execApprovalQueue.filter((entry) => entry.id !== active.id);
+      this.execApprovalQueue = this.execApprovalQueue.filter(
+        (entry) => entry.id !== active.id,
+      );
     } catch (err) {
       this.execApprovalError = `Exec approval failed: ${String(err)}`;
     } finally {
@@ -488,6 +512,14 @@ export class ClawdbotApp extends LitElement {
     const newRatio = Math.max(0.4, Math.min(0.7, ratio));
     this.splitRatio = newRatio;
     this.applySettings({ ...this.settings, splitRatio: newRatio });
+  }
+
+  handleSelectReplyTo(message: unknown | null) {
+    this.replyToMessage = message;
+  }
+
+  handleClearReplyTo() {
+    this.replyToMessage = null;
   }
 
   render() {

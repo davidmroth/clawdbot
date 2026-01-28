@@ -50,10 +50,18 @@ import {
   rotateDeviceToken,
 } from "./controllers/devices";
 import { renderSkills } from "./views/skills";
-import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers";
+import {
+  renderChatControls,
+  renderTab,
+  renderThemeToggle,
+} from "./app-render.helpers";
 import { loadChannels } from "./controllers/channels";
 import { loadPresence } from "./controllers/presence";
-import { deleteSession, loadSessions, patchSession } from "./controllers/sessions";
+import {
+  deleteSession,
+  loadSessions,
+  patchSession,
+} from "./controllers/sessions";
 import {
   installSkill,
   loadSkills,
@@ -78,7 +86,13 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals";
-import { loadCronRuns, toggleCronJob, runCronJob, removeCronJob, addCronJob } from "./controllers/cron";
+import {
+  loadCronRuns,
+  toggleCronJob,
+  runCronJob,
+  removeCronJob,
+  addCronJob,
+} from "./controllers/cron";
 import { loadDebug, callDebugMethod } from "./controllers/debug";
 import { loadLogs } from "./controllers/logs";
 
@@ -88,15 +102,13 @@ const AVATAR_HTTP_RE = /^https?:\/\//i;
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
   const parsed = parseAgentSessionKey(state.sessionKey);
-  const agentId =
-    parsed?.agentId ??
-    state.agentsList?.defaultId ??
-    "main";
+  const agentId = parsed?.agentId ?? state.agentsList?.defaultId ?? "main";
   const agent = list.find((entry) => entry.id === agentId);
   const identity = agent?.identity;
   const candidate = identity?.avatarUrl ?? identity?.avatar;
   if (!candidate) return undefined;
-  if (AVATAR_DATA_RE.test(candidate) || AVATAR_HTTP_RE.test(candidate)) return candidate;
+  if (AVATAR_DATA_RE.test(candidate) || AVATAR_HTTP_RE.test(candidate))
+    return candidate;
   return identity?.avatarUrl;
 }
 
@@ -104,15 +116,26 @@ export function renderApp(state: AppViewState) {
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
-  const chatDisabledReason = state.connected ? null : "Disconnected from gateway.";
+  const chatDisabledReason = state.connected
+    ? null
+    : "Disconnected from gateway.";
   const isChat = state.tab === "chat";
-  const chatFocus = isChat && (state.settings.chatFocusMode || state.onboarding);
-  const showThinking = state.onboarding ? false : state.settings.chatShowThinking;
+  const chatFocus =
+    isChat && (state.settings.chatFocusMode || state.onboarding);
+  const showThinking = state.onboarding
+    ? false
+    : state.settings.chatShowThinking;
   const assistantAvatarUrl = resolveAssistantAvatarUrl(state);
   const chatAvatarUrl = state.chatAvatarUrl ?? assistantAvatarUrl ?? null;
 
   return html`
-    <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
+    <div
+      class="shell ${isChat ? "shell--chat" : ""} ${chatFocus
+        ? "shell--chat-focus"
+        : ""} ${state.settings.navCollapsed
+        ? "shell--nav-collapsed"
+        : ""} ${state.onboarding ? "shell--onboarding" : ""}"
+    >
       <header class="topbar">
         <div class="topbar-left">
           <button
@@ -122,14 +145,21 @@ export function renderApp(state: AppViewState) {
                 ...state.settings,
                 navCollapsed: !state.settings.navCollapsed,
               })}
-            title="${state.settings.navCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
-            aria-label="${state.settings.navCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
+            title="${state.settings.navCollapsed
+              ? "Expand sidebar"
+              : "Collapse sidebar"}"
+            aria-label="${state.settings.navCollapsed
+              ? "Expand sidebar"
+              : "Collapse sidebar"}"
           >
             <span class="nav-collapse-toggle__icon">${icons.menu}</span>
           </button>
           <div class="brand">
             <div class="brand-logo">
-              <img src="https://mintcdn.com/clawdhub/4rYvG-uuZrMK_URE/assets/pixel-lobster.svg?fit=max&auto=format&n=4rYvG-uuZrMK_URE&q=85&s=da2032e9eac3b5d9bfe7eb96ca6a8a26" alt="Clawdbot" />
+              <img
+                src="https://mintcdn.com/clawdhub/4rYvG-uuZrMK_URE/assets/pixel-lobster.svg?fit=max&auto=format&n=4rYvG-uuZrMK_URE&q=85&s=da2032e9eac3b5d9bfe7eb96ca6a8a26"
+                alt="Clawdbot"
+              />
             </div>
             <div class="brand-text">
               <div class="brand-title">CLAWDBOT</div>
@@ -148,10 +178,15 @@ export function renderApp(state: AppViewState) {
       </header>
       <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
         ${TAB_GROUPS.map((group) => {
-          const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
+          const isGroupCollapsed =
+            state.settings.navGroupsCollapsed[group.label] ?? false;
           const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
           return html`
-            <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
+            <div
+              class="nav-group ${isGroupCollapsed && !hasActiveTab
+                ? "nav-group--collapsed"
+                : ""}"
+            >
               <button
                 class="nav-label"
                 @click=${() => {
@@ -165,7 +200,9 @@ export function renderApp(state: AppViewState) {
                 aria-expanded=${!isGroupCollapsed}
               >
                 <span class="nav-label__text">${group.label}</span>
-                <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
+                <span class="nav-label__chevron"
+                  >${isGroupCollapsed ? "+" : "−"}</span
+                >
               </button>
               <div class="nav-group__items">
                 ${group.tabs.map((tab) => renderTab(state, tab))}
@@ -185,7 +222,9 @@ export function renderApp(state: AppViewState) {
               rel="noreferrer"
               title="Docs (opens in new tab)"
             >
-              <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
+              <span class="nav-item__icon" aria-hidden="true"
+                >${icons.book}</span
+              >
               <span class="nav-item__text">Docs</span>
             </a>
           </div>
@@ -234,7 +273,6 @@ export function renderApp(state: AppViewState) {
               onRefresh: () => state.loadOverview(),
             })
           : nothing}
-
         ${state.tab === "channels"
           ? renderChannels({
               connected: state.connected,
@@ -258,7 +296,8 @@ export function renderApp(state: AppViewState) {
               onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
               onWhatsAppWait: () => state.handleWhatsAppWait(),
               onWhatsAppLogout: () => state.handleWhatsAppLogout(),
-              onConfigPatch: (path, value) => updateConfigFormValue(state, path, value),
+              onConfigPatch: (path, value) =>
+                updateConfigFormValue(state, path, value),
               onConfigSave: () => state.handleChannelConfigSave(),
               onConfigReload: () => state.handleChannelConfigReload(),
               onNostrProfileEdit: (accountId, profile) =>
@@ -268,10 +307,10 @@ export function renderApp(state: AppViewState) {
                 state.handleNostrProfileFieldChange(field, value),
               onNostrProfileSave: () => state.handleNostrProfileSave(),
               onNostrProfileImport: () => state.handleNostrProfileImport(),
-              onNostrProfileToggleAdvanced: () => state.handleNostrProfileToggleAdvanced(),
+              onNostrProfileToggleAdvanced: () =>
+                state.handleNostrProfileToggleAdvanced(),
             })
           : nothing}
-
         ${state.tab === "instances"
           ? renderInstances({
               loading: state.presenceLoading,
@@ -281,7 +320,6 @@ export function renderApp(state: AppViewState) {
               onRefresh: () => loadPresence(state),
             })
           : nothing}
-
         ${state.tab === "sessions"
           ? renderSessions({
               loading: state.sessionsLoading,
@@ -297,13 +335,12 @@ export function renderApp(state: AppViewState) {
                 state.sessionsFilterLimit = next.limit;
                 state.sessionsIncludeGlobal = next.includeGlobal;
                 state.sessionsIncludeUnknown = next.includeUnknown;
-	              },
-	              onRefresh: () => loadSessions(state),
-	              onPatch: (key, patch) => patchSession(state, key, patch),
-	              onDelete: (key) => deleteSession(state, key),
-	            })
-	          : nothing}
-
+              },
+              onRefresh: () => loadSessions(state),
+              onPatch: (key, patch) => patchSession(state, key, patch),
+              onDelete: (key) => deleteSession(state, key),
+            })
+          : nothing}
         ${state.tab === "cron"
           ? renderCron({
               loading: state.cronLoading,
@@ -314,12 +351,13 @@ export function renderApp(state: AppViewState) {
               form: state.cronForm,
               channels: state.channelsSnapshot?.channelMeta?.length
                 ? state.channelsSnapshot.channelMeta.map((entry) => entry.id)
-                : state.channelsSnapshot?.channelOrder ?? [],
+                : (state.channelsSnapshot?.channelOrder ?? []),
               channelLabels: state.channelsSnapshot?.channelLabels ?? {},
               channelMeta: state.channelsSnapshot?.channelMeta ?? [],
               runsJobId: state.cronRunsJobId,
               runs: state.cronRuns,
-              onFormChange: (patch) => (state.cronForm = { ...state.cronForm, ...patch }),
+              onFormChange: (patch) =>
+                (state.cronForm = { ...state.cronForm, ...patch }),
               onRefresh: () => state.loadCron(),
               onAdd: () => addCronJob(state),
               onToggle: (job, enabled) => toggleCronJob(state, job, enabled),
@@ -328,7 +366,6 @@ export function renderApp(state: AppViewState) {
               onLoadRuns: (jobId) => loadCronRuns(state, jobId),
             })
           : nothing}
-
         ${state.tab === "skills"
           ? renderSkills({
               loading: state.skillsLoading,
@@ -340,14 +377,14 @@ export function renderApp(state: AppViewState) {
               busyKey: state.skillsBusyKey,
               onFilterChange: (next) => (state.skillsFilter = next),
               onRefresh: () => loadSkills(state, { clearMessages: true }),
-              onToggle: (key, enabled) => updateSkillEnabled(state, key, enabled),
+              onToggle: (key, enabled) =>
+                updateSkillEnabled(state, key, enabled),
               onEdit: (key, value) => updateSkillEdit(state, key, value),
               onSaveKey: (key) => saveSkillApiKey(state, key),
               onInstall: (skillKey, name, installId) =>
                 installSkill(state, skillKey, name, installId),
             })
           : nothing}
-
         ${state.tab === "nodes"
           ? renderNodes({
               loading: state.nodesLoading,
@@ -355,7 +392,12 @@ export function renderApp(state: AppViewState) {
               devicesLoading: state.devicesLoading,
               devicesError: state.devicesError,
               devicesList: state.devicesList,
-              configForm: state.configForm ?? (state.configSnapshot?.config as Record<string, unknown> | null),
+              configForm:
+                state.configForm ??
+                (state.configSnapshot?.config as Record<
+                  string,
+                  unknown
+                > | null),
               configLoading: state.configLoading,
               configSaving: state.configSaving,
               configDirty: state.configFormDirty,
@@ -370,8 +412,10 @@ export function renderApp(state: AppViewState) {
               execApprovalsTargetNodeId: state.execApprovalsTargetNodeId,
               onRefresh: () => loadNodes(state),
               onDevicesRefresh: () => loadDevices(state),
-              onDeviceApprove: (requestId) => approveDevicePairing(state, requestId),
-              onDeviceReject: (requestId) => rejectDevicePairing(state, requestId),
+              onDeviceApprove: (requestId) =>
+                approveDevicePairing(state, requestId),
+              onDeviceReject: (requestId) =>
+                rejectDevicePairing(state, requestId),
               onDeviceRotate: (deviceId, role, scopes) =>
                 rotateDeviceToken(state, { deviceId, role, scopes }),
               onDeviceRevoke: (deviceId, role) =>
@@ -379,20 +423,35 @@ export function renderApp(state: AppViewState) {
               onLoadConfig: () => loadConfig(state),
               onLoadExecApprovals: () => {
                 const target =
-                  state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
-                    ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
+                  state.execApprovalsTarget === "node" &&
+                  state.execApprovalsTargetNodeId
+                    ? {
+                        kind: "node" as const,
+                        nodeId: state.execApprovalsTargetNodeId,
+                      }
                     : { kind: "gateway" as const };
                 return loadExecApprovals(state, target);
               },
               onBindDefault: (nodeId) => {
                 if (nodeId) {
-                  updateConfigFormValue(state, ["tools", "exec", "node"], nodeId);
+                  updateConfigFormValue(
+                    state,
+                    ["tools", "exec", "node"],
+                    nodeId,
+                  );
                 } else {
                   removeConfigFormValue(state, ["tools", "exec", "node"]);
                 }
               },
               onBindAgent: (agentIndex, nodeId) => {
-                const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
+                const basePath = [
+                  "agents",
+                  "list",
+                  agentIndex,
+                  "tools",
+                  "exec",
+                  "node",
+                ];
                 if (nodeId) {
                   updateConfigFormValue(state, basePath, nodeId);
                 } else {
@@ -417,14 +476,17 @@ export function renderApp(state: AppViewState) {
                 removeExecApprovalsFormValue(state, path),
               onSaveExecApprovals: () => {
                 const target =
-                  state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
-                    ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
+                  state.execApprovalsTarget === "node" &&
+                  state.execApprovalsTargetNodeId
+                    ? {
+                        kind: "node" as const,
+                        nodeId: state.execApprovalsTargetNodeId,
+                      }
                     : { kind: "gateway" as const };
                 return saveExecApprovals(state, target);
               },
             })
           : nothing}
-
         ${state.tab === "chat"
           ? renderChat({
               sessionKey: state.sessionKey,
@@ -467,7 +529,10 @@ export function renderApp(state: AppViewState) {
               focusMode: chatFocus,
               onRefresh: () => {
                 state.resetToolStream();
-                return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
+                return Promise.all([
+                  loadChatHistory(state),
+                  refreshChatAvatar(state),
+                ]);
               },
               onToggleFocusMode: () => {
                 if (state.onboarding) return;
@@ -496,24 +561,50 @@ export function renderApp(state: AppViewState) {
               onOpenSidebar: (content: string, mode?: "view" | "edit") => {
                 // Heuristic: Auto-detect language for edit mode if not explicitly set
                 if (mode === "edit" && !state.sidebarLanguage) {
-                    if (content.trim().startsWith("{")) state.handleSidebarLanguageChange("json");
-                    else if (content.includes("import ") || content.includes("const ") || content.includes("function ")) state.handleSidebarLanguageChange("javascript");
-                    else if (content.includes("def ") || content.includes("import ") || content.includes("class ")) state.handleSidebarLanguageChange("python");
-                    else if (content.includes("<html>") || content.includes("</div>")) state.handleSidebarLanguageChange("html");
-                    else if (content.includes("body {") || content.includes(".class")) state.handleSidebarLanguageChange("css");
-                    else state.handleSidebarLanguageChange("plaintext");
+                  if (content.trim().startsWith("{"))
+                    state.handleSidebarLanguageChange("json");
+                  else if (
+                    content.includes("import ") ||
+                    content.includes("const ") ||
+                    content.includes("function ")
+                  )
+                    state.handleSidebarLanguageChange("javascript");
+                  else if (
+                    content.includes("def ") ||
+                    content.includes("import ") ||
+                    content.includes("class ")
+                  )
+                    state.handleSidebarLanguageChange("python");
+                  else if (
+                    content.includes("<html>") ||
+                    content.includes("</div>")
+                  )
+                    state.handleSidebarLanguageChange("html");
+                  else if (
+                    content.includes("body {") ||
+                    content.includes(".class")
+                  )
+                    state.handleSidebarLanguageChange("css");
+                  else state.handleSidebarLanguageChange("plaintext");
                 }
                 state.handleOpenSidebar(content, mode);
               },
-              onSidebarContentChange: (content: string) => state.handleSidebarContentChange(content),
-              onSidebarLanguageChange: (language: string) => state.handleSidebarLanguageChange(language),
+              onSidebarContentChange: (content: string) =>
+                state.handleSidebarContentChange(content),
+              onSidebarLanguageChange: (language: string) =>
+                state.handleSidebarLanguageChange(language),
               onCloseSidebar: () => state.handleCloseSidebar(),
-              onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
+              onSplitRatioChange: (ratio: number) =>
+                state.handleSplitRatioChange(ratio),
               assistantName: state.assistantName,
               assistantAvatar: state.assistantAvatar,
+              // Reply-to-message props
+              replyToMessage: state.replyToMessage,
+              onSelectReplyTo: (message: unknown) =>
+                state.handleSelectReplyTo(message),
+              onClearReplyTo: () => state.handleClearReplyTo(),
             })
           : nothing}
-
         ${state.tab === "config"
           ? renderConfig({
               raw: state.configRaw,
@@ -538,20 +629,21 @@ export function renderApp(state: AppViewState) {
                 state.configRaw = next;
               },
               onFormModeChange: (mode) => (state.configFormMode = mode),
-              onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
+              onFormPatch: (path, value) =>
+                updateConfigFormValue(state, path, value),
               onSearchChange: (query) => (state.configSearchQuery = query),
               onSectionChange: (section) => {
                 state.configActiveSection = section;
                 state.configActiveSubsection = null;
               },
-              onSubsectionChange: (section) => (state.configActiveSubsection = section),
+              onSubsectionChange: (section) =>
+                (state.configActiveSubsection = section),
               onReload: () => loadConfig(state),
               onSave: () => saveConfig(state),
               onApply: () => applyConfig(state),
               onUpdate: () => runUpdate(state),
             })
           : nothing}
-
         ${state.tab === "debug"
           ? renderDebug({
               loading: state.debugLoading,
@@ -570,7 +662,6 @@ export function renderApp(state: AppViewState) {
               onCall: () => callDebugMethod(state),
             })
           : nothing}
-
         ${state.tab === "logs"
           ? renderLogs({
               loading: state.logsLoading,
@@ -583,7 +674,10 @@ export function renderApp(state: AppViewState) {
               truncated: state.logsTruncated,
               onFilterTextChange: (next) => (state.logsFilterText = next),
               onLevelToggle: (level, enabled) => {
-                state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
+                state.logsLevelFilters = {
+                  ...state.logsLevelFilters,
+                  [level]: enabled,
+                };
               },
               onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
               onRefresh: () => loadLogs(state, { reset: true }),

@@ -75,13 +75,32 @@
 }
 
 .chat-text :where(blockquote) {
-  border-left: 3px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
   padding-left: 12px;
   margin-left: 0;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.02);
   padding: 8px 12px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  position: relative;
+}
+
+/* First blockquote at start of user message is a reply quote */
+.chat-group.user .chat-bubble > .chat-text > blockquote:first-child {
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+}
+
+.chat-group.user .chat-bubble > .chat-text > blockquote:first-child::before {
+  content: "Replying to:";
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  margin-bottom: 4px;
+  opacity: 0.8;
 }
 
 .chat-text :where(blockquote blockquote) {
