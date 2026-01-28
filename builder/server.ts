@@ -8,13 +8,23 @@ const WORKSPACE_ROOT = "/app";
 const DIST_DIR = join(WORKSPACE_ROOT, "dist");
 const BACKUP_DIR = join(WORKSPACE_ROOT, "dist_backup");
 
+interface CommandResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}
+
 const runCommand = (
   command: string,
   args: string[],
   logFn: (msg: string) => void,
-): Promise<void> => {
-  return new Promise((resolve, reject) => {
+): Promise<CommandResult> => {
+  return new Promise((resolve) => {
     logFn(`[Builder] Running: ${command} ${args.join(" ")}\n`);
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
 
     const proc = spawn(command, args, {
       cwd: WORKSPACE_ROOT,
@@ -23,27 +33,72 @@ const runCommand = (
       env: { ...process.env, CI: "true" },
     });
 
-    proc.stdout.on("data", (data) => logFn(data.toString()));
-    proc.stderr.on("data", (data) => logFn(data.toString()));
+    proc.stdout.on("data", (data) => {
+      const text = data.toString();
+      stdoutChunks.push(text);
+      logFn(text);
+    });
+    proc.stderr.on("data", (data) => {
+      const text = data.toString();
+      stderrChunks.push(text);
+      logFn(text);
+    });
 
     proc.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`Command '${command}' failed with code ${code}`));
+      resolve({
+        success: code === 0,
+        stdout: stdoutChunks.join(""),
+        stderr: stderrChunks.join(""),
+        exitCode: code,
+      });
     });
   });
+};
+
+interface AgentErrorResponse {
+  status: "error";
+  error_code: string;
+  message: string;
+  suggestion: string;
+  retry_endpoint?: string;
+}
+
+/**
+ * Appends a structured agent error to the response stream.
+ * Uses a marker so the agent can parse the JSON from the log output.
+ */
+const sendAgentError = (
+  res: ServerResponse,
+  error: AgentErrorResponse,
+): void => {
+  res.write("\n---AGENT_RESPONSE---\n");
+  res.write(JSON.stringify(error, null, 2) + "\n");
+  res.statusCode = 500;
+  res.end();
 };
 
 const server = createServer(
   async (req: IncomingMessage, res: ServerResponse) => {
     console.log("[*] recieved: ", req.url);
 
-    if (req.method === "POST" && req.url === "/build") {
+    // Parse URL and query params
+    const url = new URL(req.url || "/", `http://localhost:${PORT}`);
+    const pathname = url.pathname;
+    const noFrozenLockfile =
+      url.searchParams.get("no-frozen-lockfile") === "true";
+
+    if (req.method === "POST" && pathname === "/build") {
       const log = (msg: string) => {
         process.stdout.write(msg);
         res.write(msg);
       };
 
       log("[Builder] Triggered! Starting safe pipeline...\n");
+      if (noFrozenLockfile) {
+        log(
+          "[Builder] ⚠️ Running without --frozen-lockfile (agent requested)\n",
+        );
+      }
 
       try {
         // 1. Backup Phase
@@ -64,23 +119,68 @@ const server = createServer(
         }
 
         // 2. Install Phase
-        await runCommand("npx", ["pnpm", "install", "--frozen-lockfile"], log);
+        // Note: pnpm with CI=true defaults to frozen-lockfile, so we must explicitly disable it
+        const installArgs = noFrozenLockfile
+          ? ["pnpm", "install", "--no-frozen-lockfile"]
+          : ["pnpm", "install", "--frozen-lockfile"];
+
+        const installResult = await runCommand("npx", installArgs, log);
+
+        if (!installResult.success) {
+          // Check for outdated lockfile error (pnpm outputs to stdout)
+          const output = installResult.stdout + installResult.stderr;
+          if (output.includes("ERR_PNPM_OUTDATED_LOCKFILE")) {
+            return sendAgentError(res, {
+              status: "error",
+              error_code: "ERR_PNPM_OUTDATED_LOCKFILE",
+              message:
+                "The pnpm-lock.yaml file is out of sync with package.json",
+              suggestion:
+                "The lockfile needs to be updated. Retry the build with the 'no-frozen-lockfile' query parameter to allow pnpm to update it automatically.",
+              retry_endpoint: "/build?no-frozen-lockfile=true",
+            });
+          }
+
+          // Generic install failure
+          throw new Error(`Install failed with code ${installResult.exitCode}`);
+        }
 
         // 3. Test Phase
         // await runCommand('npx', ['pnpm', 'test'], log);
 
         // 4. Build Phase
-        await runCommand("npx", ["pnpm", "build"], log);
+        const buildResult = await runCommand("npx", ["pnpm", "build"], log);
+        if (!buildResult.success) {
+          throw new Error(`Build failed with code ${buildResult.exitCode}`);
+        }
 
         // ENV CLAWDBOT_PREFER_PNPM=1
         // Pass this env var to the UI build process
         process.env.CLAWDBOT_PREFER_PNPM = "1";
 
         // 5. UI Install Phase
-        await runCommand("npx", ["pnpm", "ui:install"], log);
+        const uiInstallResult = await runCommand(
+          "npx",
+          ["pnpm", "ui:install"],
+          log,
+        );
+        if (!uiInstallResult.success) {
+          throw new Error(
+            `UI install failed with code ${uiInstallResult.exitCode}`,
+          );
+        }
 
         // 6. UI Build Phase
-        await runCommand("npx", ["pnpm", "ui:build"], log);
+        const uiBuildResult = await runCommand(
+          "npx",
+          ["pnpm", "ui:build"],
+          log,
+        );
+        if (!uiBuildResult.success) {
+          throw new Error(
+            `UI build failed with code ${uiBuildResult.exitCode}`,
+          );
+        }
 
         // 7. Cleanup Phase (Success)
         log("[Builder] Build successful. Removing backup...\n");

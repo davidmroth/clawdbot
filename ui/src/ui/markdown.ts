@@ -16,10 +16,16 @@ const allowedTags = [
   "blockquote",
   "br",
   "button",
+  "circle",
+  "clipPath",
   "code",
+  "defs",
   "del",
   "div",
+  "ellipse",
   "em",
+  "foreignObject",
+  "g",
   "h1",
   "h2",
   "h3",
@@ -27,46 +33,93 @@ const allowedTags = [
   "hr",
   "i",
   "li",
+  "line",
+  "linearGradient",
+  "marker",
   "ol",
   "p",
   "path",
+  "polygon",
   "polyline",
   "pre",
+  "radialGradient",
   "rect",
   "span",
+  "stop",
   "strong",
+  "style",
   "svg",
   "table",
   "tbody",
   "td",
+  "text",
+  "textPath",
   "th",
   "thead",
+  "title",
   "tr",
+  "tspan",
   "ul",
+  "use",
 ];
 
 const allowedAttrs = [
   "aria-hidden",
   "aria-label",
+  "aria-labelledby",
   "class",
+  "clip-path",
+  "cx",
+  "cy",
   "d",
+  "data-mermaid-id",
+  "dominant-baseline",
+  "dx",
+  "dy",
   "fill",
+  "fill-opacity",
+  "font-family",
+  "font-size",
+  "font-weight",
   "height",
   "href",
+  "id",
+  "marker-end",
+  "marker-start",
+  "offset",
+  "opacity",
   "points",
+  "r",
+  "refX",
+  "refY",
   "rel",
   "rx",
   "ry",
   "start",
+  "stop-color",
+  "stop-opacity",
   "stroke",
+  "stroke-dasharray",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-opacity",
   "stroke-width",
+  "style",
   "target",
+  "text-anchor",
   "title",
+  "transform",
   "type",
   "viewBox",
   "width",
   "x",
+  "x1",
+  "x2",
+  "xlink:href",
+  "xmlns",
   "y",
+  "y1",
+  "y2",
 ];
 
 // Custom renderer for Grok-style code blocks
@@ -86,6 +139,30 @@ const renderer = {
       lang = typeof infostring === "string" ? infostring : "plain";
     }
 
+    // Clean up language string
+    const cleanLang = (lang || "").toLowerCase().trim();
+
+    // Special handling for mermaid diagrams
+    if (cleanLang === "mermaid") {
+      const mermaidId = `mermaid-${Math.random().toString(36).slice(2, 11)}`;
+      const escapedCode = escapeHtml(code);
+      return `
+        <div class="mermaid-container" data-mermaid-id="${mermaidId}">
+          <div class="mermaid-diagram" id="${mermaidId}">${escapedCode}</div>
+          <div class="mermaid-fallback" style="display: none;">
+            <div class="code-block">
+              <div class="code-header">
+                <span class="code-lang">mermaid</span>
+              </div>
+              <div class="code-content">
+                <pre><code class="hljs">${escapedCode}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     // Custom renderer for Grok-style code blocks
     // Note: We deliberately do NOT use the 'collapsed' logic here anymore for sidebar/tool outputs
     // to ensure they are always fully visible and scrollable.
@@ -93,9 +170,6 @@ const renderer = {
     // Highlight using highlight.js
     let highlighted;
     try {
-      // Clean up language string (e.g. "json" from "```json")
-      const cleanLang = (lang || "").toLowerCase().trim();
-
       // Map common aliases/extensions to highlight.js names
       const langMap: Record<string, string> = {
         js: "javascript",

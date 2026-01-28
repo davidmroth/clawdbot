@@ -280,6 +280,7 @@ export class ClawdbotApp extends LitElement {
   private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null =
     null;
   private topbarObserver: ResizeObserver | null = null;
+  private mermaidObserver: MutationObserver | null = null;
 
   createRenderRoot() {
     return this;

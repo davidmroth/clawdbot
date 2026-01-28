@@ -141,3 +141,64 @@
   border-top: 1px solid var(--border);
   margin: 1em 0;
 }
+
+/* Mermaid diagram containers */
+.mermaid-container {
+  margin: 1em 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-container[data-mermaid-rendered="error"] .mermaid-fallback {
+  display: block !important;
+}
+
+.mermaid-container[data-mermaid-rendered="error"] .mermaid-diagram {
+  display: none !important;
+}
+
+/* Mermaid error banner */
+.mermaid-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(var(--warning-rgb, 234, 179, 8), 0.15);
+  border-bottom: 1px solid rgba(var(--warning-rgb, 234, 179, 8), 0.3);
+  color: var(--warning, #eab308);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mermaid-error-banner svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.mermaid-error-banner span {
+  opacity: 0.9;
+}
+
+/* Light theme adjustments for mermaid */
+:root[data-theme="light"] .mermaid-container {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+:root[data-theme="light"] .mermaid-error-banner {
+  background: rgba(234, 179, 8, 0.1);
+  color: #b45309;
+}

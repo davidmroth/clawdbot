@@ -588,15 +588,187 @@
   font-size: 13px;
   line-height: 1.5;
   background: var(--secondary);
-  padding: 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  max-height: 360px;
-  overflow: auto;
   max-width: 100%;
+  overflow: hidden;
 }
 
-:root[data-theme="light"] .code-block,
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-lang {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.code-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.code-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--duration-fast) ease;
+}
+
+.code-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border);
+}
+
+.code-btn svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.code-content {
+  max-height: 400px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.code-content pre {
+  margin: 0;
+  padding: 12px;
+  background: transparent;
+  overflow-x: auto;
+}
+
+.code-content code {
+  display: block;
+  color: var(--text);
+  white-space: pre;
+}
+
+/* Syntax highlighting - ensure readable colors */
+.code-content .hljs {
+  color: #e0e0e0;
+}
+
+.code-content .hljs-keyword,
+.code-content .hljs-selector-tag,
+.code-content .hljs-literal,
+.code-content .hljs-section,
+.code-content .hljs-link {
+  color: #c792ea;
+}
+
+.code-content .hljs-string,
+.code-content .hljs-title,
+.code-content .hljs-name,
+.code-content .hljs-type,
+.code-content .hljs-attr,
+.code-content .hljs-symbol,
+.code-content .hljs-bullet,
+.code-content .hljs-addition,
+.code-content .hljs-template-variable,
+.code-content .hljs-template-tag {
+  color: #c3e88d;
+}
+
+.code-content .hljs-comment,
+.code-content .hljs-quote,
+.code-content .hljs-deletion,
+.code-content .hljs-meta {
+  color: #7c8088;
+}
+
+.code-content .hljs-number,
+.code-content .hljs-regexp,
+.code-content .hljs-built_in,
+.code-content .hljs-variable {
+  color: #f78c6c;
+}
+
+.code-content .hljs-attribute {
+  color: #ffcb6b;
+}
+
+/* Light theme code block overrides */
+:root[data-theme="light"] .code-block {
+  background: #fafafa;
+  border-color: #e0e0e0;
+}
+
+:root[data-theme="light"] .code-header {
+  background: #f0f0f0;
+  border-color: #e0e0e0;
+}
+
+:root[data-theme="light"] .code-lang {
+  color: #666;
+}
+
+:root[data-theme="light"] .code-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .code-content code,
+:root[data-theme="light"] .code-content .hljs {
+  color: #24292e;
+}
+
+:root[data-theme="light"] .code-content .hljs-keyword,
+:root[data-theme="light"] .code-content .hljs-selector-tag,
+:root[data-theme="light"] .code-content .hljs-literal,
+:root[data-theme="light"] .code-content .hljs-section,
+:root[data-theme="light"] .code-content .hljs-link {
+  color: #d73a49;
+}
+
+:root[data-theme="light"] .code-content .hljs-string,
+:root[data-theme="light"] .code-content .hljs-title,
+:root[data-theme="light"] .code-content .hljs-name,
+:root[data-theme="light"] .code-content .hljs-type,
+:root[data-theme="light"] .code-content .hljs-attr,
+:root[data-theme="light"] .code-content .hljs-symbol,
+:root[data-theme="light"] .code-content .hljs-bullet,
+:root[data-theme="light"] .code-content .hljs-addition,
+:root[data-theme="light"] .code-content .hljs-template-variable,
+:root[data-theme="light"] .code-content .hljs-template-tag {
+  color: #22863a;
+}
+
+:root[data-theme="light"] .code-content .hljs-comment,
+:root[data-theme="light"] .code-content .hljs-quote,
+:root[data-theme="light"] .code-content .hljs-deletion,
+:root[data-theme="light"] .code-content .hljs-meta {
+  color: #6a737d;
+}
+
+:root[data-theme="light"] .code-content .hljs-number,
+:root[data-theme="light"] .code-content .hljs-regexp,
+:root[data-theme="light"] .code-content .hljs-built_in,
+:root[data-theme="light"] .code-content .hljs-variable {
+  color: #005cc5;
+}
+
+:root[data-theme="light"] .code-content .hljs-attribute {
+  color: #e36209;
+}
+
 :root[data-theme="light"] .list-item,
 :root[data-theme="light"] .table-row,
 :root[data-theme="light"] .chip {

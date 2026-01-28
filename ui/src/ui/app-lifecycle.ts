@@ -8,7 +8,11 @@ import {
   syncTabWithLocation,
   syncThemeWithSettings,
 } from "./app-settings";
-import { observeTopbar, scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
+import {
+  observeTopbar,
+  scheduleChatScroll,
+  scheduleLogsScroll,
+} from "./app-scroll";
 import {
   startLogsPolling,
   startNodesPolling,
@@ -17,6 +21,7 @@ import {
   startDebugPolling,
   stopDebugPolling,
 } from "./app-polling";
+import { setupMermaidObserver, updateMermaidTheme } from "./mermaid";
 
 type LifecycleHost = {
   basePath: string;
@@ -31,6 +36,7 @@ type LifecycleHost = {
   logsEntries: unknown[];
   popStateHandler: () => void;
   topbarObserver: ResizeObserver | null;
+  mermaidObserver: MutationObserver | null;
 };
 
 export function handleConnected(host: LifecycleHost) {
@@ -55,12 +61,18 @@ export function handleConnected(host: LifecycleHost) {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
   }
   if (host.tab === "debug") {
-    startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
+    startDebugPolling(
+      host as unknown as Parameters<typeof startDebugPolling>[0],
+    );
   }
+  // Update mermaid theme when theme changes
+  updateMermaidTheme();
 }
 
 export function handleFirstUpdated(host: LifecycleHost) {
   observeTopbar(host as unknown as Parameters<typeof observeTopbar>[0]);
+  // Set up mermaid observer to render diagrams as they appear
+  host.mermaidObserver = setupMermaidObserver();
 }
 
 export function handleDisconnected(host: LifecycleHost) {
@@ -73,6 +85,8 @@ export function handleDisconnected(host: LifecycleHost) {
   );
   host.topbarObserver?.disconnect();
   host.topbarObserver = null;
+  host.mermaidObserver?.disconnect();
+  host.mermaidObserver = null;
 }
 
 export function handleUpdated(
@@ -99,7 +113,9 @@ export function handleUpdated(
   }
   if (
     host.tab === "logs" &&
-    (changed.has("logsEntries") || changed.has("logsAutoFollow") || changed.has("tab"))
+    (changed.has("logsEntries") ||
+      changed.has("logsAutoFollow") ||
+      changed.has("tab"))
   ) {
     if (host.logsAutoFollow && host.logsAtBottom) {
       scheduleLogsScroll(
