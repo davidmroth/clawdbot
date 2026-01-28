@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
+import { cleanupOrphanedSessionLocks } from "../agents/session-write-lock.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
@@ -11,6 +14,10 @@ import {
 } from "../channels/plugins/index.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { formatCliCommand } from "../cli/command-format.js";
+import { resolveMainSessionKeyFromConfig } from "../config/sessions.js";
+import { runCronIsolatedAgentTurn } from "../cron/isolated-agent.js";
+import { enqueueSystemEvent } from "../infra/system-events.js";
+import type { CronJob } from "../cron/types.js";
 import {
   CONFIG_PATH_CLAWDBOT,
   isNixMode,
@@ -249,6 +256,14 @@ export async function startGatewayServer(
     cfgAtStart,
     defaultAgentId,
   );
+
+  // Clean up orphaned lock files from previous crashes
+  const sessionsDir = path.join(defaultWorkspaceDir, "sessions");
+  const cleanedLocks = await cleanupOrphanedSessionLocks(sessionsDir);
+  if (cleanedLocks > 0) {
+    log.info(`Cleaned up ${cleanedLocks} orphaned session lock(s)`);
+  }
+
   const baseMethods = listGatewayMethods();
   const { pluginRegistry, gatewayMethods: baseGatewayMethods } =
     loadGatewayPlugins({
@@ -478,8 +493,27 @@ export async function startGatewayServer(
     forwarder: execApprovalForwarder,
   });
 
-  // Initialize consciousness service with defaults
-  // TODO: Add config schema support for consciousness settings
+  /* eslint-disable prefer-const */
+  let broadcastRef: (
+    event: string,
+    payload: unknown,
+    opts?: {
+      dropIfSlow?: boolean;
+      stateVersion?: { presence?: number; health?: number };
+    },
+  ) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let nodeSendToSessionRef: (
+    sessionKey: string,
+    event: string,
+    payload: unknown,
+  ) => void;
+  /* eslint-enable prefer-const */
+
+  let lastConsciousnessRunAt = 0;
+  const CONSCIOUSNESS_THROTTLE_MS = 30_000;
+
+  // Initialize consciousness service
   const consciousnessService = new ConsciousnessService(
     {
       enabled: true,
@@ -487,13 +521,148 @@ export async function startGatewayServer(
       maxLogEntries: 500,
     },
     {
-      // TODO: Wire prompt injection callback
+      injectPrompt: async (prompt, metadata) => {
+        const now = Date.now();
+        const mainSessionKey = resolveMainSessionKeyFromConfig();
+
+        // OPTIMIZATION 1: Throttling
+        // Don't run if we ran too recently (unless it's a specific prompted event, but we treat all as background for now)
+        if (now - lastConsciousnessRunAt < CONSCIOUSNESS_THROTTLE_MS) {
+          if (
+            metadata.eventLogEntryId &&
+            typeof metadata.eventLogEntryId === "string"
+          ) {
+            consciousnessService.eventLog.update(metadata.eventLogEntryId, {
+              agentDecision: "ignore",
+              agentReasoning: "Throttled: Too frequent runs.",
+            });
+          }
+          return;
+        }
+
+        // OPTIMIZATION 2: Yield to User
+        // If the main agent is currently processing a turn, we should yield resources
+        // to avoid locking session files or slowing down the response.
+        // We can't easily map mainSessionKey to sessionId here without reading disk,
+        // effectively assumes single tenant main session for now or just checks global load.
+        // Checking global active runs is a safe heuristic for "System is Busy".
+        if (chatRunState.registry.hasActiveRuns()) {
+          if (
+            metadata.eventLogEntryId &&
+            typeof metadata.eventLogEntryId === "string"
+          ) {
+            consciousnessService.eventLog.update(metadata.eventLogEntryId, {
+              agentDecision: "ignore",
+              agentReasoning: "Yielding: User is active.",
+            });
+          }
+          return;
+        }
+
+        lastConsciousnessRunAt = now;
+        const jobId = randomUUID();
+        // Use a distinct session scope for consciousness thoughts to allow parallel thinking
+        // but linked to main identity.
+        const sessionKey = `consciousness:${randomUUID()}`;
+
+        const job: CronJob = {
+          id: jobId,
+          name: "Consciousness Stream",
+          enabled: true,
+          createdAtMs: now,
+          updatedAtMs: now,
+          schedule: { kind: "at", atMs: now },
+          sessionTarget: "isolated",
+          wakeMode: "now",
+          payload: {
+            kind: "agentTurn",
+            message: prompt,
+            thinking: "medium", // Allow some reasoning
+            allowUnsafeExternalContent: false,
+          },
+          state: { nextRunAtMs: now },
+        };
+
+        try {
+          const cfg = loadConfig();
+          const result = await runCronIsolatedAgentTurn({
+            cfg,
+            deps,
+            job,
+            message: prompt,
+            sessionKey,
+            lane: "cron",
+          });
+
+          // Update event log with decision
+          if (
+            metadata.eventLogEntryId &&
+            typeof metadata.eventLogEntryId === "string"
+          ) {
+            const entryId = metadata.eventLogEntryId;
+            let decision: "notify" | "schedule" | "ignore" = "ignore";
+
+            if (result.status === "ok") {
+              const text = result.outputText ?? "";
+              const hasMessage = text.trim().length > 0;
+              const hasTools = result.summary
+                ?.toLowerCase()
+                .includes("called tool");
+
+              if (hasMessage) {
+                decision = "notify";
+                // Broadcast message to UI
+                if (broadcastRef) {
+                  const payload = {
+                    runId: randomUUID(),
+                    sessionKey: mainSessionKey,
+                    seq: 0,
+                    state: "final",
+                    message: {
+                      role: "assistant",
+                      content: [
+                        { type: "text", text: `[Consciousness] ${text}` },
+                      ],
+                      timestamp: Date.now(),
+                    },
+                  };
+                  broadcastRef("chat", payload);
+                  if (nodeSendToSessionRef) {
+                    nodeSendToSessionRef(mainSessionKey, "chat", payload);
+                  }
+                  // NOTE: Do NOT use enqueueSystemEvent here - it prepends to user messages
+                }
+              } else if (hasTools) {
+                decision = "schedule";
+              }
+            }
+
+            consciousnessService.eventLog.update(entryId, {
+              agentDecision: decision,
+              agentReasoning: result.summary ?? result.error,
+            });
+          }
+        } catch (err) {
+          log.warn(`Consciousness agent run failed: ${String(err)}`);
+          if (
+            metadata.eventLogEntryId &&
+            typeof metadata.eventLogEntryId === "string"
+          ) {
+            consciousnessService.eventLog.update(metadata.eventLogEntryId, {
+              agentDecision: "ignore",
+              agentReasoning: `Error: ${String(err)}`,
+            });
+          }
+        }
+      },
     },
   );
 
   // Subscribe to consciousness events for UI broadcast
   consciousnessService.subscribeToEvents((entry) => {
-    broadcast("consciousness.event", entry, { dropIfSlow: true });
+    if (broadcastRef) {
+      broadcastRef("consciousness.event", entry, { dropIfSlow: true });
+    }
   });
 
   // Start consciousness
@@ -559,6 +728,11 @@ export async function startGatewayServer(
       consciousnessService,
     },
   });
+
+  // Assign refs now that they are available
+  broadcastRef = broadcast;
+  nodeSendToSessionRef = nodeSendToSession;
+
   logGatewayStartup({
     cfg: cfgAtStart,
     bindHost,

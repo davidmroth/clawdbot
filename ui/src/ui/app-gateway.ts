@@ -5,10 +5,19 @@ import { loadAgents } from "./controllers/agents";
 import type { GatewayEventFrame, GatewayHelloOk } from "./gateway";
 import { GatewayBrowserClient } from "./gateway";
 import type { EventLogEntry } from "./app-events";
-import type { AgentsListResult, PresenceEntry, HealthSnapshot, StatusSummary } from "./types";
+import type {
+  AgentsListResult,
+  PresenceEntry,
+  HealthSnapshot,
+  StatusSummary,
+} from "./types";
 import type { Tab } from "./navigation";
 import type { UiSettings } from "./storage";
-import { handleAgentEvent, resetToolStream, type AgentEventPayload } from "./app-tool-stream";
+import {
+  handleAgentEvent,
+  resetToolStream,
+  type AgentEventPayload,
+} from "./app-tool-stream";
 import { flushChatQueueForEvent } from "./app-chat";
 import {
   applySettings,
@@ -80,9 +89,15 @@ function normalizeSessionKeyForDefaults(
   return isAlias ? mainSessionKey : raw;
 }
 
-function applySessionDefaults(host: GatewayHost, defaults?: SessionDefaultsSnapshot) {
+function applySessionDefaults(
+  host: GatewayHost,
+  defaults?: SessionDefaultsSnapshot,
+) {
   if (!defaults?.mainSessionKey) return;
-  const resolvedSessionKey = normalizeSessionKeyForDefaults(host.sessionKey, defaults);
+  const resolvedSessionKey = normalizeSessionKeyForDefaults(
+    host.sessionKey,
+    defaults,
+  );
   const resolvedSettingsSessionKey = normalizeSessionKeyForDefaults(
     host.settings.sessionKey,
     defaults,
@@ -91,7 +106,8 @@ function applySessionDefaults(host: GatewayHost, defaults?: SessionDefaultsSnaps
     host.settings.lastActiveSessionKey,
     defaults,
   );
-  const nextSessionKey = resolvedSessionKey || resolvedSettingsSessionKey || host.sessionKey;
+  const nextSessionKey =
+    resolvedSessionKey || resolvedSettingsSessionKey || host.sessionKey;
   const nextSettings = {
     ...host.settings,
     sessionKey: resolvedSettingsSessionKey || nextSessionKey,
@@ -104,7 +120,10 @@ function applySessionDefaults(host: GatewayHost, defaults?: SessionDefaultsSnaps
     host.sessionKey = nextSessionKey;
   }
   if (shouldUpdateSettings) {
-    applySettings(host as unknown as Parameters<typeof applySettings>[0], nextSettings);
+    applySettings(
+      host as unknown as Parameters<typeof applySettings>[0],
+      nextSettings,
+    );
   }
 }
 
@@ -131,10 +150,22 @@ export function connectGateway(host: GatewayHost) {
       void loadAgents(host as unknown as ClawdbotApp);
       void loadNodes(host as unknown as ClawdbotApp, { quiet: true });
       void loadDevices(host as unknown as ClawdbotApp, { quiet: true });
-      void refreshActiveTab(host as unknown as Parameters<typeof refreshActiveTab>[0]);
+      // Always refresh chat history on reconnect to recover from missed events
+      void loadChatHistory(host as unknown as ClawdbotApp);
+      void refreshActiveTab(
+        host as unknown as Parameters<typeof refreshActiveTab>[0],
+      );
     },
     onClose: ({ code, reason }) => {
       host.connected = false;
+      // Clear stale chat stream state to prevent incomplete messages on reconnect
+      host.chatRunId = null;
+      const appHost = host as unknown as {
+        chatStream: string | null;
+        chatStreamStartedAt: number | null;
+      };
+      appHost.chatStream = null;
+      appHost.chatStreamStartedAt = null;
       // Code 1012 = Service Restart (expected during config saves, don't show as error)
       if (code !== 1012) {
         host.lastError = `disconnected (${code}): ${reason || "no reason"}`;
@@ -207,7 +238,10 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     void loadCron(host as unknown as Parameters<typeof loadCron>[0]);
   }
 
-  if (evt.event === "device.pair.requested" || evt.event === "device.pair.resolved") {
+  if (
+    evt.event === "device.pair.requested" ||
+    evt.event === "device.pair.resolved"
+  ) {
     void loadDevices(host as unknown as ClawdbotApp, { quiet: true });
   }
 
@@ -218,16 +252,37 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       host.execApprovalError = null;
       const delay = Math.max(0, entry.expiresAtMs - Date.now() + 500);
       window.setTimeout(() => {
-        host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, entry.id);
+        host.execApprovalQueue = removeExecApproval(
+          host.execApprovalQueue,
+          entry.id,
+        );
       }, delay);
     }
     return;
   }
 
+  if (evt.event === "consciousness:update") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const state = evt.payload as any;
+    if (state) {
+      // Direct state update on host (ClawdbotApp)
+      const app = host as any;
+      app.consciousnessEnabled = state.enabled;
+      app.consciousnessLastHeartbeat = state.lastHeartbeat;
+      // Map 'entries' from backend to 'consciousnessTimeline' in UI
+      app.consciousnessTimeline = state.entries ?? [];
+      app.consciousnessActiveTasks = state.activeTasks ?? [];
+      app.consciousnessPendingReminders = state.pendingReminders ?? [];
+    }
+  }
+
   if (evt.event === "exec.approval.resolved") {
     const resolved = parseExecApprovalResolved(evt.payload);
     if (resolved) {
-      host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, resolved.id);
+      host.execApprovalQueue = removeExecApproval(
+        host.execApprovalQueue,
+        resolved.id,
+      );
     }
   }
 }

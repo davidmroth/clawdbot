@@ -1,5 +1,8 @@
 import { normalizeVerboseLevel } from "../auto-reply/thinking.js";
-import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
+import {
+  type AgentEventPayload,
+  getAgentRunContext,
+} from "../infra/agent-events.js";
 import { loadSessionEntry } from "./session-utils.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -12,8 +15,13 @@ export type ChatRunRegistry = {
   add: (sessionId: string, entry: ChatRunEntry) => void;
   peek: (sessionId: string) => ChatRunEntry | undefined;
   shift: (sessionId: string) => ChatRunEntry | undefined;
-  remove: (sessionId: string, clientRunId: string, sessionKey?: string) => ChatRunEntry | undefined;
+  remove: (
+    sessionId: string,
+    clientRunId: string,
+    sessionKey?: string,
+  ) => ChatRunEntry | undefined;
   clear: () => void;
+  hasActiveRuns: (sessionId?: string) => boolean;
 };
 
 export function createChatRunRegistry(): ChatRunRegistry {
@@ -38,12 +46,17 @@ export function createChatRunRegistry(): ChatRunRegistry {
     return entry;
   };
 
-  const remove = (sessionId: string, clientRunId: string, sessionKey?: string) => {
+  const remove = (
+    sessionId: string,
+    clientRunId: string,
+    sessionKey?: string,
+  ) => {
     const queue = chatRunSessions.get(sessionId);
     if (!queue || queue.length === 0) return undefined;
     const idx = queue.findIndex(
       (entry) =>
-        entry.clientRunId === clientRunId && (sessionKey ? entry.sessionKey === sessionKey : true),
+        entry.clientRunId === clientRunId &&
+        (sessionKey ? entry.sessionKey === sessionKey : true),
     );
     if (idx < 0) return undefined;
     const [entry] = queue.splice(idx, 1);
@@ -55,7 +68,15 @@ export function createChatRunRegistry(): ChatRunRegistry {
     chatRunSessions.clear();
   };
 
-  return { add, peek, shift, remove, clear };
+  const hasActiveRuns = (sessionId?: string) => {
+    if (sessionId) {
+      const queue = chatRunSessions.get(sessionId);
+      return queue ? queue.length > 0 : false;
+    }
+    return chatRunSessions.size > 0;
+  };
+
+  return { add, peek, shift, remove, clear, hasActiveRuns };
 }
 
 export type ChatRunState = {
@@ -94,7 +115,11 @@ export type ChatEventBroadcast = (
   opts?: { dropIfSlow?: boolean },
 ) => void;
 
-export type NodeSendToSession = (sessionKey: string, event: string, payload: unknown) => void;
+export type NodeSendToSession = (
+  sessionKey: string,
+  event: string,
+  payload: unknown,
+) => void;
 
 export type AgentEventHandlerOptions = {
   broadcast: ChatEventBroadcast;
@@ -115,7 +140,12 @@ export function createAgentEventHandler({
   resolveSessionKeyForRun,
   clearAgentRunContext,
 }: AgentEventHandlerOptions) {
-  const emitChatDelta = (sessionKey: string, clientRunId: string, seq: number, text: string) => {
+  const emitChatDelta = (
+    sessionKey: string,
+    clientRunId: string,
+    seq: number,
+    text: string,
+  ) => {
     chatRunState.buffers.set(clientRunId, text);
     const now = Date.now();
     const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
@@ -184,7 +214,9 @@ export function createAgentEventHandler({
       const { cfg, entry } = loadSessionEntry(sessionKey);
       const sessionVerbose = normalizeVerboseLevel(entry?.verboseLevel);
       if (sessionVerbose) return sessionVerbose === "on";
-      const defaultVerbose = normalizeVerboseLevel(cfg.agents?.defaults?.verboseDefault);
+      const defaultVerbose = normalizeVerboseLevel(
+        cfg.agents?.defaults?.verboseDefault,
+      );
       return defaultVerbose === "on";
     } catch {
       return false;
@@ -193,10 +225,12 @@ export function createAgentEventHandler({
 
   return (evt: AgentEventPayload) => {
     const chatLink = chatRunState.registry.peek(evt.runId);
-    const sessionKey = chatLink?.sessionKey ?? resolveSessionKeyForRun(evt.runId);
+    const sessionKey =
+      chatLink?.sessionKey ?? resolveSessionKeyForRun(evt.runId);
     const clientRunId = chatLink?.clientRunId ?? evt.runId;
     const isAborted =
-      chatRunState.abortedRuns.has(clientRunId) || chatRunState.abortedRuns.has(evt.runId);
+      chatRunState.abortedRuns.has(clientRunId) ||
+      chatRunState.abortedRuns.has(evt.runId);
     // Include sessionKey so Control UI can filter tool streams per session.
     const agentPayload = sessionKey ? { ...evt, sessionKey } : evt;
     const last = agentRunSeq.get(evt.runId) ?? 0;
@@ -218,42 +252,52 @@ export function createAgentEventHandler({
       });
     }
     agentRunSeq.set(evt.runId, evt.seq);
-    
+
     const isWatchdogRun = evt.runId.startsWith("watchdog-");
 
     // Only broadcast globally if NOT a watchdog run (or if we really want debug visibility, but user asked to hide it)
     if (!isWatchdogRun) {
-        broadcast("agent", agentPayload);
+      broadcast("agent", agentPayload);
     }
 
     const lifecyclePhase =
-      evt.stream === "lifecycle" && typeof evt.data?.phase === "string" ? evt.data.phase : null;
+      evt.stream === "lifecycle" && typeof evt.data?.phase === "string"
+        ? evt.data.phase
+        : null;
 
     if (sessionKey) {
       // Only broadcast agent events if NOT a watchdog run, or if it's a tool event (we might want to see side effects like messages)
       if (!isWatchdogRun || evt.stream === "tool") {
         nodeSendToSession(sessionKey, "agent", agentPayload);
       }
-      if (!isAborted && evt.stream === "assistant" && typeof evt.data?.text === "string") {
+      if (
+        !isAborted &&
+        evt.stream === "assistant" &&
+        typeof evt.data?.text === "string"
+      ) {
         if (!isWatchdogRun) {
           emitChatDelta(sessionKey, clientRunId, evt.seq, evt.data.text);
         }
-      } else if (!isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
+      } else if (
+        !isAborted &&
+        (lifecyclePhase === "end" || lifecyclePhase === "error")
+      ) {
         if (chatLink) {
           const finished = chatRunState.registry.shift(evt.runId);
-          if (!finished) {
-            clearAgentRunContext(evt.runId);
-            return;
-          }
-          // Only emit Chat Final (which updates the transcript UI) if it's NOT a watchdog run
-          if (!finished.clientRunId.startsWith("watchdog-")) {
+          // Always emit final, even if entry was already removed (race condition safeguard)
+          const effectiveSessionKey = finished?.sessionKey ?? sessionKey;
+          const effectiveClientRunId = finished?.clientRunId ?? clientRunId;
+          if (!effectiveClientRunId.startsWith("watchdog-")) {
             emitChatFinal(
-              finished.sessionKey,
-              finished.clientRunId,
+              effectiveSessionKey,
+              effectiveClientRunId,
               evt.seq,
               lifecyclePhase === "error" ? "error" : "done",
               evt.data?.error,
             );
+          }
+          if (!finished) {
+            clearAgentRunContext(evt.runId);
           }
         } else {
           // Same check for direct runs
@@ -270,7 +314,10 @@ export function createAgentEventHandler({
         if (!isWatchdogRun) {
           WatchdogService.scheduleCheck(sessionKey);
         }
-      } else if (isAborted && (lifecyclePhase === "end" || lifecyclePhase === "error")) {
+      } else if (
+        isAborted &&
+        (lifecyclePhase === "end" || lifecyclePhase === "error")
+      ) {
         chatRunState.abortedRuns.delete(clientRunId);
         chatRunState.abortedRuns.delete(evt.runId);
         chatRunState.buffers.delete(clientRunId);

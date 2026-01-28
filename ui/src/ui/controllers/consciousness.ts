@@ -108,11 +108,17 @@ export async function toggleConsciousness(
  */
 export function subscribeToConsciousnessEvents(
   client: GatewayBrowserClient,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onEvent: (entry: EventLogEntry) => void,
 ): () => void {
-  // This would use WebSocket subscription when implemented
-  // For now, return a no-op unsubscribe function
-  return () => {};
+  // Trigger subscription on the backend
+  client.request("consciousness.subscribe", {}).catch((err) => {
+    console.warn("Failed to subscribe to consciousness events:", err);
+  });
+
+  return () => {
+    // No unsubscribe method needed yet as backend handles disconnects
+  };
 }
 
 /**

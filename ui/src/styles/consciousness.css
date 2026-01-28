@@ -401,7 +401,7 @@
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--color-text-secondary);
+  color: #e5e5e5;
   max-height: 300px;
   overflow-y: auto;
 }

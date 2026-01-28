@@ -22,24 +22,36 @@ export type GatewayCronState = {
 export function buildGatewayCronService(params: {
   cfg: ReturnType<typeof loadConfig>;
   deps: CliDeps;
-  broadcast: (event: string, payload: unknown, opts?: { dropIfSlow?: boolean }) => void;
+  broadcast: (
+    event: string,
+    payload: unknown,
+    opts?: { dropIfSlow?: boolean },
+  ) => void;
 }): GatewayCronState {
   const cronLogger = getChildLogger({ module: "cron" });
   const storePath = resolveCronStorePath(params.cfg.cron?.store);
-  const cronEnabled = process.env.CLAWDBOT_SKIP_CRON !== "1" && params.cfg.cron?.enabled !== false;
+  const cronEnabled =
+    process.env.CLAWDBOT_SKIP_CRON !== "1" &&
+    params.cfg.cron?.enabled !== false;
 
   const resolveCronAgent = (requested?: string | null) => {
     const runtimeConfig = loadConfig();
     const normalized =
-      typeof requested === "string" && requested.trim() ? normalizeAgentId(requested) : undefined;
+      typeof requested === "string" && requested.trim()
+        ? normalizeAgentId(requested)
+        : undefined;
     const hasAgent =
       normalized !== undefined &&
       Array.isArray(runtimeConfig.agents?.list) &&
       runtimeConfig.agents.list.some(
         (entry) =>
-          entry && typeof entry.id === "string" && normalizeAgentId(entry.id) === normalized,
+          entry &&
+          typeof entry.id === "string" &&
+          normalizeAgentId(entry.id) === normalized,
       );
-    const agentId = hasAgent ? normalized : resolveDefaultAgentId(runtimeConfig);
+    const agentId = hasAgent
+      ? normalized
+      : resolveDefaultAgentId(runtimeConfig);
     return { agentId, cfg: runtimeConfig };
   };
 
@@ -53,6 +65,21 @@ export function buildGatewayCronService(params: {
         agentId,
       });
       enqueueSystemEvent(text, { sessionKey });
+    },
+    broadcastChatMessage: (sessionKey, text) => {
+      // Broadcast reminder as a separate assistant message in the chat UI
+      const payload = {
+        runId: `cron-${Date.now()}`,
+        sessionKey,
+        seq: 0,
+        state: "final",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: `[System] ${text}` }],
+          timestamp: Date.now(),
+        },
+      };
+      params.broadcast("chat", payload);
     },
     requestHeartbeatNow,
     runHeartbeatOnce: async (opts) => {
@@ -94,7 +121,10 @@ export function buildGatewayCronService(params: {
           durationMs: evt.durationMs,
           nextRunAtMs: evt.nextRunAtMs,
         }).catch((err) => {
-          cronLogger.warn({ err: String(err), logPath }, "cron: run log append failed");
+          cronLogger.warn(
+            { err: String(err), logPath },
+            "cron: run log append failed",
+          );
         });
       }
     },
