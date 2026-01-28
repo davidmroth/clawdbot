@@ -86,7 +86,8 @@
   background: rgba(0, 0, 0, 0.12);
   border-radius: 4px;
   padding: 12px;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 50vh;
 }
 
 .sidebar-markdown code {

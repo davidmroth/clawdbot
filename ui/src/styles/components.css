@@ -647,13 +647,33 @@
   max-height: 400px;
   overflow: auto;
   scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
+}
+
+.code-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.code-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+}
+
+.code-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
 }
 
 .code-content pre {
   margin: 0;
   padding: 12px;
   background: transparent;
-  overflow-x: auto;
+  border: none;
+  border-radius: 0;
 }
 
 .code-content code {
@@ -709,7 +729,14 @@
 /* Light theme code block overrides */
 :root[data-theme="light"] .code-block {
   background: #fafafa;
-  border-color: #e0e0e0;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Override any hljs default backgrounds/borders */
+.code-content .hljs {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
 }
 
 :root[data-theme="light"] .code-header {

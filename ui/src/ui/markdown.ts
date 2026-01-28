@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { truncateText } from "./format";
+import { preProcessContent } from "./content-preprocessor";
 
 declare const hljs: any;
 
@@ -269,8 +270,12 @@ function installHooks() {
 }
 
 export function toSanitizedMarkdownHtml(markdown: string): string {
-  const input = markdown.trim();
-  if (!input) return "";
+  const rawInput = markdown.trim();
+  if (!rawInput) return "";
+
+  // Pre-process to detect and wrap raw structured content (JSON, XML, etc.)
+  const input = preProcessContent(rawInput);
+
   installHooks();
   if (input.length <= MARKDOWN_CACHE_MAX_CHARS) {
     const cached = getCachedMarkdown(input);
