@@ -1,8 +1,14 @@
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
-import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
+import {
+  type ChannelId,
+  listChannelPlugins,
+} from "../channels/plugins/index.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import {
@@ -28,8 +34,14 @@ import {
 } from "../infra/skills-remote.js";
 import { scheduleGatewayUpdateCheck } from "../infra/update-startup.js";
 import { setGatewaySigusr1RestartPolicy } from "../infra/restart.js";
-import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
-import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
+import {
+  startDiagnosticHeartbeat,
+  stopDiagnosticHeartbeat,
+} from "../logging/diagnostic.js";
+import {
+  createSubsystemLogger,
+  runtimeForLogger,
+} from "../logging/subsystem.js";
 import type { PluginServicesHandle } from "../plugins/services.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { runOnboardingWizard } from "../wizard/onboarding.js";
@@ -69,6 +81,7 @@ import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
 import { WatchdogService } from "./watchdog.js";
+import { ConsciousnessService } from "../consciousness/consciousness-service.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
 
@@ -92,7 +105,10 @@ const logWatchdog = log.child("watchdog");
 const canvasRuntime = runtimeForLogger(logCanvas);
 
 export type GatewayServer = {
-  close: (opts?: { reason?: string; restartExpectedMs?: number | null }) => Promise<void>;
+  close: (opts?: {
+    reason?: string;
+    restartExpectedMs?: number | null;
+  }) => Promise<void>;
 };
 
 export type GatewayServerOptions = {
@@ -168,7 +184,9 @@ export async function startGatewayServer(
         "Legacy config entries detected while running in Nix mode. Update your Nix config to the latest schema and restart.",
       );
     }
-    const { config: migrated, changes } = migrateLegacyConfig(configSnapshot.parsed);
+    const { config: migrated, changes } = migrateLegacyConfig(
+      configSnapshot.parsed,
+    );
     if (!migrated) {
       throw new Error(
         `Legacy config entries detected but auto-migration failed. Run "${formatCliCommand("clawdbot doctor")}" to migrate.`,
@@ -197,7 +215,10 @@ export async function startGatewayServer(
     );
   }
 
-  const autoEnable = applyPluginAutoEnable({ config: configSnapshot.config, env: process.env });
+  const autoEnable = applyPluginAutoEnable({
+    config: configSnapshot.config,
+    env: process.env,
+  });
   if (autoEnable.changes.length > 0) {
     try {
       await writeConfigFile(autoEnable.config);
@@ -207,7 +228,9 @@ export async function startGatewayServer(
           .join("\n")}`,
       );
     } catch (err) {
-      log.warn(`gateway: failed to persist plugin auto-enable changes: ${String(err)}`);
+      log.warn(
+        `gateway: failed to persist plugin auto-enable changes: ${String(err)}`,
+      );
     }
   }
 
@@ -216,27 +239,43 @@ export async function startGatewayServer(
   if (diagnosticsEnabled) {
     startDiagnosticHeartbeat();
   }
-  setGatewaySigusr1RestartPolicy({ allowExternal: cfgAtStart.commands?.restart === true });
+  setGatewaySigusr1RestartPolicy({
+    allowExternal: cfgAtStart.commands?.restart === true,
+  });
   initSubagentRegistry();
   WatchdogService.setLogger(logWatchdog);
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
-  const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);
+  const defaultWorkspaceDir = resolveAgentWorkspaceDir(
+    cfgAtStart,
+    defaultAgentId,
+  );
   const baseMethods = listGatewayMethods();
-  const { pluginRegistry, gatewayMethods: baseGatewayMethods } = loadGatewayPlugins({
-    cfg: cfgAtStart,
-    workspaceDir: defaultWorkspaceDir,
-    log,
-    coreGatewayHandlers,
-    baseMethods,
-  });
+  const { pluginRegistry, gatewayMethods: baseGatewayMethods } =
+    loadGatewayPlugins({
+      cfg: cfgAtStart,
+      workspaceDir: defaultWorkspaceDir,
+      log,
+      coreGatewayHandlers,
+      baseMethods,
+    });
   const channelLogs = Object.fromEntries(
-    listChannelPlugins().map((plugin) => [plugin.id, logChannels.child(plugin.id)]),
+    listChannelPlugins().map((plugin) => [
+      plugin.id,
+      logChannels.child(plugin.id),
+    ]),
   ) as Record<ChannelId, ReturnType<typeof createSubsystemLogger>>;
   const channelRuntimeEnvs = Object.fromEntries(
-    Object.entries(channelLogs).map(([id, logger]) => [id, runtimeForLogger(logger)]),
+    Object.entries(channelLogs).map(([id, logger]) => [
+      id,
+      runtimeForLogger(logger),
+    ]),
   ) as Record<ChannelId, RuntimeEnv>;
-  const channelMethods = listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []);
-  const gatewayMethods = Array.from(new Set([...baseGatewayMethods, ...channelMethods]));
+  const channelMethods = listChannelPlugins().flatMap(
+    (plugin) => plugin.gatewayMethods ?? [],
+  );
+  const gatewayMethods = Array.from(
+    new Set([...baseGatewayMethods, ...channelMethods]),
+  );
   let pluginServices: PluginServicesHandle | null = null;
   const runtimeConfig = await resolveGatewayRuntimeConfig({
     cfg: cfgAtStart,
@@ -264,11 +303,15 @@ export async function startGatewayServer(
   const canvasHostEnabled = runtimeConfig.canvasHostEnabled;
 
   const wizardRunner = opts.wizardRunner ?? runOnboardingWizard;
-  const { wizardSessions, findRunningWizard, purgeWizardSession } = createWizardSessionTracker();
+  const { wizardSessions, findRunningWizard, purgeWizardSession } =
+    createWizardSessionTracker();
 
   const deps = createDefaultDeps();
   let canvasHostServer: CanvasHostServer | null = null;
-  const gatewayTls = await loadGatewayTlsRuntime(cfgAtStart.gateway?.tls, log.child("tls"));
+  const gatewayTls = await loadGatewayTlsRuntime(
+    cfgAtStart.gateway?.tls,
+    log.child("tls"),
+  );
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
   }
@@ -314,11 +357,19 @@ export async function startGatewayServer(
   const nodeRegistry = new NodeRegistry();
   const nodePresenceTimers = new Map<string, ReturnType<typeof setInterval>>();
   const nodeSubscriptions = createNodeSubscriptionManager();
-  const nodeSendEvent = (opts: { nodeId: string; event: string; payloadJSON?: string | null }) => {
+  const nodeSendEvent = (opts: {
+    nodeId: string;
+    event: string;
+    payloadJSON?: string | null;
+  }) => {
     const payload = safeParseJson(opts.payloadJSON ?? null);
     nodeRegistry.sendEvent(opts.nodeId, opts.event, payload);
   };
-  const nodeSendToSession = (sessionKey: string, event: string, payload: unknown) =>
+  const nodeSendToSession = (
+    sessionKey: string,
+    event: string,
+    payload: unknown,
+  ) =>
     nodeSubscriptions.sendToSession(sessionKey, event, payload, nodeSendEvent);
   const nodeSendToAllSubscribed = (event: string, payload: unknown) =>
     nodeSubscriptions.sendToAllSubscribed(event, payload, nodeSendEvent);
@@ -343,8 +394,13 @@ export async function startGatewayServer(
     channelLogs,
     channelRuntimeEnvs,
   });
-  const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
-    channelManager;
+  const {
+    getRuntimeSnapshot,
+    startChannels,
+    startChannel,
+    stopChannel,
+    markChannelLoggedOut,
+  } = channelManager;
 
   const machineDisplayName = await getMachineDisplayName();
   const discovery = await startGatewayDiscovery({
@@ -377,22 +433,23 @@ export async function startGatewayServer(
     }, skillsRefreshDelayMs);
   });
 
-  const { tickInterval, healthInterval, dedupeCleanup } = startGatewayMaintenanceTimers({
-    broadcast,
-    nodeSendToAllSubscribed,
-    getPresenceVersion,
-    getHealthVersion,
-    refreshGatewayHealthSnapshot,
-    logHealth,
-    dedupe,
-    chatAbortControllers,
-    chatRunState,
-    chatRunBuffers,
-    chatDeltaSentAt,
-    removeChatRun,
-    agentRunSeq,
-    nodeSendToSession,
-  });
+  const { tickInterval, healthInterval, dedupeCleanup } =
+    startGatewayMaintenanceTimers({
+      broadcast,
+      nodeSendToAllSubscribed,
+      getPresenceVersion,
+      getHealthVersion,
+      refreshGatewayHealthSnapshot,
+      logHealth,
+      dedupe,
+      chatAbortControllers,
+      chatRunState,
+      chatRunBuffers,
+      chatDeltaSentAt,
+      removeChatRun,
+      agentRunSeq,
+      nodeSendToSession,
+    });
 
   const agentUnsub = onAgentEvent(
     createAgentEventHandler({
@@ -411,7 +468,9 @@ export async function startGatewayServer(
 
   let heartbeatRunner = startHeartbeatRunner({ cfg: cfgAtStart });
 
-  void cron.start().catch((err) => logCron.error(`failed to start: ${String(err)}`));
+  void cron
+    .start()
+    .catch((err) => logCron.error(`failed to start: ${String(err)}`));
 
   const execApprovalManager = new ExecApprovalManager();
   const execApprovalForwarder = createExecApprovalForwarder();
@@ -419,7 +478,29 @@ export async function startGatewayServer(
     forwarder: execApprovalForwarder,
   });
 
-  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)?.port;
+  // Initialize consciousness service with defaults
+  // TODO: Add config schema support for consciousness settings
+  const consciousnessService = new ConsciousnessService(
+    {
+      enabled: true,
+      heartbeatIntervalMs: 60000,
+      maxLogEntries: 500,
+    },
+    {
+      // TODO: Wire prompt injection callback
+    },
+  );
+
+  // Subscribe to consciousness events for UI broadcast
+  consciousnessService.subscribeToEvents((entry) => {
+    broadcast("consciousness.event", entry, { dropIfSlow: true });
+  });
+
+  // Start consciousness
+  consciousnessService.start();
+
+  const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)
+    ?.port;
 
   attachGatewayWsHandlers({
     wss,
@@ -475,6 +556,7 @@ export async function startGatewayServer(
       markChannelLoggedOut,
       wizardRunner,
       broadcastVoiceWakeChanged,
+      consciousnessService,
     },
   });
   logGatewayStartup({
@@ -495,7 +577,9 @@ export async function startGatewayServer(
     logTailscale,
   });
 
-  let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
+  let browserControl: Awaited<
+    ReturnType<typeof startBrowserControlServerIfEnabled>
+  > = null;
   ({ browserControl, pluginServices } = await startGatewaySidecars({
     cfg: cfgAtStart,
     pluginRegistry,
@@ -508,31 +592,33 @@ export async function startGatewayServer(
     logBrowser,
   }));
 
-  const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers({
-    deps,
-    broadcast,
-    getState: () => ({
-      hooksConfig,
-      heartbeatRunner,
-      cronState,
-      browserControl,
-    }),
-    setState: (nextState) => {
-      hooksConfig = nextState.hooksConfig;
-      heartbeatRunner = nextState.heartbeatRunner;
-      cronState = nextState.cronState;
-      cron = cronState.cron;
-      cronStorePath = cronState.storePath;
-      browserControl = nextState.browserControl;
+  const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers(
+    {
+      deps,
+      broadcast,
+      getState: () => ({
+        hooksConfig,
+        heartbeatRunner,
+        cronState,
+        browserControl,
+      }),
+      setState: (nextState) => {
+        hooksConfig = nextState.hooksConfig;
+        heartbeatRunner = nextState.heartbeatRunner;
+        cronState = nextState.cronState;
+        cron = cronState.cron;
+        cronStorePath = cronState.storePath;
+        browserControl = nextState.browserControl;
+      },
+      startChannel,
+      stopChannel,
+      logHooks,
+      logBrowser,
+      logChannels,
+      logCron,
+      logReload,
     },
-    startChannel,
-    stopChannel,
-    logHooks,
-    logBrowser,
-    logChannels,
-    logCron,
-    logReload,
-  });
+  );
 
   const configReloader = startGatewayConfigReloader({
     initialConfig: cfgAtStart,

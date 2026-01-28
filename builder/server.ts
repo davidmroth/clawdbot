@@ -8,6 +8,64 @@ const WORKSPACE_ROOT = "/app";
 const DIST_DIR = join(WORKSPACE_ROOT, "dist");
 const BACKUP_DIR = join(WORKSPACE_ROOT, "dist_backup");
 
+// Gateway restart configuration
+const GATEWAY_URL =
+  process.env.CLAWDBOT_GATEWAY_URL || "http://clawdbot-gateway:18789";
+const GATEWAY_TOKEN = process.env.CLAWDBOT_GATEWAY_TOKEN || "";
+const DEBUG = process.env.BUILDER_DEBUG === "true";
+
+/**
+ * Calls the gateway's /v1/restart endpoint to trigger a graceful restart.
+ */
+const restartGateway = async (
+  logFn: (msg: string) => void,
+): Promise<{ success: boolean; error?: string }> => {
+  const restartUrl = `${GATEWAY_URL}/v1/restart`;
+  logFn("[Builder] Triggering gateway restart...\n");
+
+  if (DEBUG) {
+    logFn(`[Builder] DEBUG: GATEWAY_URL = "${GATEWAY_URL}"\n`);
+    logFn(`[Builder] DEBUG: Fetch URL = "${restartUrl}"\n`);
+    logFn(`[Builder] DEBUG: Token present = ${GATEWAY_TOKEN ? "yes" : "no"}\n`);
+    logFn(`[Builder] DEBUG: Token length = ${GATEWAY_TOKEN.length}\n`);
+  }
+
+  try {
+    const response = await fetch(restartUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${GATEWAY_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logFn(`[Builder] Gateway restart failed: ${response.status} ${text}\n`);
+      return { success: false, error: `${response.status}: ${text}` };
+    }
+
+    const result = await response.json();
+    logFn(`[Builder] Gateway restart initiated: ${JSON.stringify(result)}\n`);
+    return { success: true };
+  } catch (error: any) {
+    logFn(`[Builder] Gateway restart error: ${error.message}\n`);
+    // Log the full error including cause for Node.js fetch errors
+    if (DEBUG && error.cause) {
+      logFn(
+        `[Builder] DEBUG: Error cause: ${error.cause.message || error.cause}\n`,
+      );
+      logFn(`[Builder] DEBUG: Error code: ${error.cause.code || "N/A"}\n`);
+    }
+    if (DEBUG) {
+      logFn(
+        `[Builder] DEBUG: Full error: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}\n`,
+      );
+    }
+    return { success: false, error: error.message };
+  }
+};
+
 interface CommandResult {
   success: boolean;
   stdout: string;
@@ -86,6 +144,28 @@ const server = createServer(
     const pathname = url.pathname;
     const noFrozenLockfile =
       url.searchParams.get("no-frozen-lockfile") === "true";
+
+    // Restart endpoint - triggers gateway restart
+    if (req.method === "POST" && pathname === "/restart") {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Transfer-Encoding", "chunked");
+
+      const log = (msg: string) => {
+        process.stdout.write(msg);
+        res.write(msg);
+      };
+
+      const result = await restartGateway(log);
+
+      if (result.success) {
+        res.statusCode = 200;
+        res.end("[Builder] Gateway restart command sent successfully.\n");
+      } else {
+        res.statusCode = 502;
+        res.end(`[Builder] Gateway restart failed: ${result.error}\n`);
+      }
+      return;
+    }
 
     if (req.method === "POST" && pathname === "/build") {
       const log = (msg: string) => {

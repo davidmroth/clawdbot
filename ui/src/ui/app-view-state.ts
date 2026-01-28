@@ -138,6 +138,13 @@ export type AppViewState = {
   debugCallParams: string;
   debugCallResult: string | null;
   debugCallError: string | null;
+  consciousnessLoading: boolean;
+  consciousnessEnabled: boolean;
+  consciousnessLastHeartbeat: number | null;
+  consciousnessTimeline: unknown[];
+  consciousnessActiveTasks: unknown[];
+  consciousnessPendingReminders: unknown[];
+  consciousnessSelectedEntry: unknown | null;
   logsLoading: boolean;
   logsError: string | null;
   logsFile: string | null;

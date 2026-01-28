@@ -244,6 +244,14 @@ export class ClawdbotApp extends LitElement {
   @state() debugCallResult: string | null = null;
   @state() debugCallError: string | null = null;
 
+  @state() consciousnessLoading = false;
+  @state() consciousnessEnabled = true;
+  @state() consciousnessLastHeartbeat: number | null = null;
+  @state() consciousnessTimeline: unknown[] = [];
+  @state() consciousnessActiveTasks: unknown[] = [];
+  @state() consciousnessPendingReminders: unknown[] = [];
+  @state() consciousnessSelectedEntry: unknown | null = null;
+
   @state() logsLoading = false;
   @state() logsError: string | null = null;
   @state() logsFile: string | null = null;

@@ -36,6 +36,10 @@ services:
       target: builder
       dockerfile: Dockerfile
     command: npx tsx /app/builder/server.ts
+    environment:
+      - CLAWDBOT_GATEWAY_TOKEN=${CLAWDBOT_GATEWAY_TOKEN}
+      - CLAWDBOT_GATEWAY_URL=http://clawdbot-gateway:18789
+      - BUILDER_DEBUG=false
     user: root
     volumes:
       - .:/app

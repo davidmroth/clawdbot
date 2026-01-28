@@ -43,6 +43,12 @@ import { renderOverview } from "./views/overview";
 import { renderSessions } from "./views/sessions";
 import { renderExecApprovalPrompt } from "./views/exec-approval";
 import {
+  renderConsciousness,
+  type EventLogEntry as ConsciousnessLogEntry,
+  type TrackedTask,
+  type Reminder,
+} from "./views/consciousness";
+import {
   approveDevicePairing,
   loadDevices,
   rejectDevicePairing,
@@ -94,6 +100,11 @@ import {
   addCronJob,
 } from "./controllers/cron";
 import { loadDebug, callDebugMethod } from "./controllers/debug";
+import {
+  loadConsciousnessState,
+  toggleConsciousness,
+  type EventLogEntry,
+} from "./controllers/consciousness";
 import { loadLogs } from "./controllers/logs";
 
 const AVATAR_DATA_RE = /^data:/i;
@@ -484,6 +495,52 @@ export function renderApp(state: AppViewState) {
                       }
                     : { kind: "gateway" as const };
                 return saveExecApprovals(state, target);
+              },
+            })
+          : nothing}
+        ${state.tab === "consciousness"
+          ? renderConsciousness({
+              loading: state.consciousnessLoading,
+              enabled: state.consciousnessEnabled,
+              lastHeartbeat: state.consciousnessLastHeartbeat,
+              timeline: state.consciousnessTimeline as ConsciousnessLogEntry[],
+              activeTasks: state.consciousnessActiveTasks as TrackedTask[],
+              pendingReminders:
+                state.consciousnessPendingReminders as Reminder[],
+              selectedEntry:
+                state.consciousnessSelectedEntry as ConsciousnessLogEntry | null,
+              onToggle: async (enabled) => {
+                if (!state.client) return;
+                state.consciousnessEnabled = enabled;
+                try {
+                  await toggleConsciousness(state.client, enabled);
+                } catch (e) {
+                  console.error("Failed to toggle consciousness:", e);
+                }
+              },
+              onRefresh: async () => {
+                if (!state.client) return;
+                state.consciousnessLoading = true;
+                try {
+                  const consciousnessState = await loadConsciousnessState(
+                    state.client,
+                  );
+                  state.consciousnessEnabled = consciousnessState.enabled;
+                  state.consciousnessLastHeartbeat =
+                    consciousnessState.lastHeartbeat;
+                  state.consciousnessTimeline = consciousnessState.entries;
+                  state.consciousnessActiveTasks =
+                    consciousnessState.activeTasks;
+                  state.consciousnessPendingReminders =
+                    consciousnessState.pendingReminders;
+                } catch (e) {
+                  console.error("Failed to load consciousness state:", e);
+                } finally {
+                  state.consciousnessLoading = false;
+                }
+              },
+              onSelectEntry: (entry) => {
+                state.consciousnessSelectedEntry = entry;
               },
             })
           : nothing}

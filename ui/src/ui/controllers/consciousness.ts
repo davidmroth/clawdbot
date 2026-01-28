@@ -1,0 +1,128 @@
+/**
+ * Consciousness Controller
+ *
+ * Data fetching and state management for the consciousness debug UI.
+ */
+
+import type { GatewayBrowserClient } from "../gateway.js";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types (duplicated from backend to avoid cross-build imports)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ConsciousnessEventType =
+  | "GATEWAY_READY"
+  | "TASK_EXIT"
+  | "TASK_STARTED"
+  | "REMINDER_DUE"
+  | "HEARTBEAT"
+  | "USER_MESSAGE";
+
+export type AgentDecision = "notify" | "schedule" | "ignore" | "pending";
+
+export interface EventLogEntry {
+  id: string;
+  timestamp: number;
+  type: ConsciousnessEventType;
+  stimulus: string;
+  agentDecision: AgentDecision;
+  agentReasoning?: string;
+  metadata: Record<string, unknown>;
+}
+
+export type TaskStatus = "pending" | "running" | "completed" | "failed";
+export type TaskPriority = "low" | "normal" | "high";
+
+export interface TrackedTask {
+  id: string;
+  sessionId: string;
+  description: string;
+  command?: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  startedAt: number;
+  completedAt?: number;
+  exitCode?: number;
+  userWantsUpdate: boolean;
+}
+
+export interface Reminder {
+  id: string;
+  context: string;
+  createdAt: number;
+  dueAt: number;
+  sessionId?: string;
+  fired: boolean;
+}
+
+export interface ConsciousnessState {
+  enabled: boolean;
+  lastHeartbeat: number | null;
+  entries: EventLogEntry[];
+  activeTasks: TrackedTask[];
+  pendingReminders: Reminder[];
+}
+
+export interface ConsciousnessController {
+  loading: boolean;
+  state: ConsciousnessState | null;
+  selectedEntry: EventLogEntry | null;
+  error: string | null;
+}
+
+/**
+ * Load consciousness state from the gateway
+ */
+export async function loadConsciousnessState(
+  client: GatewayBrowserClient,
+): Promise<ConsciousnessState> {
+  const result = (await client.request("consciousness.state", {})) as {
+    enabled: boolean;
+    lastHeartbeat: number | null;
+    timeline: EventLogEntry[];
+    activeTasks: TrackedTask[];
+    pendingReminders: Reminder[];
+  };
+  // Gateway returns 'timeline', UI expects 'entries'
+  return {
+    enabled: result.enabled,
+    lastHeartbeat: result.lastHeartbeat,
+    entries: result.timeline ?? [],
+    activeTasks: result.activeTasks ?? [],
+    pendingReminders: result.pendingReminders ?? [],
+  };
+}
+
+/**
+ * Toggle consciousness enabled state
+ */
+export async function toggleConsciousness(
+  client: GatewayBrowserClient,
+  enabled: boolean,
+): Promise<void> {
+  await client.request("consciousness.toggle", { enabled });
+}
+
+/**
+ * Subscribe to consciousness events (real-time updates)
+ */
+export function subscribeToConsciousnessEvents(
+  client: GatewayBrowserClient,
+  onEvent: (entry: EventLogEntry) => void,
+): () => void {
+  // This would use WebSocket subscription when implemented
+  // For now, return a no-op unsubscribe function
+  return () => {};
+}
+
+/**
+ * Initialize consciousness controller state
+ */
+export function createConsciousnessController(): ConsciousnessController {
+  return {
+    loading: false,
+    state: null,
+    selectedEntry: null,
+    error: null,
+  };
+}

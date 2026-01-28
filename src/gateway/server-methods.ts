@@ -1,5 +1,6 @@
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { agentHandlers } from "./server-methods/agent.js";
+import { consciousnessHandlers } from "./server-methods/consciousness.js";
 import { agentsHandlers } from "./server-methods/agents.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
@@ -18,7 +19,10 @@ import { skillsHandlers } from "./server-methods/skills.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
 import { ttsHandlers } from "./server-methods/tts.js";
-import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
+import type {
+  GatewayRequestHandlers,
+  GatewayRequestOptions,
+} from "./server-methods/types.js";
 import { updateHandlers } from "./server-methods/update.js";
 import { usageHandlers } from "./server-methods/usage.js";
 import { voicewakeHandlers } from "./server-methods/voicewake.js";
@@ -31,8 +35,15 @@ const WRITE_SCOPE = "operator.write";
 const APPROVALS_SCOPE = "operator.approvals";
 const PAIRING_SCOPE = "operator.pairing";
 
-const APPROVAL_METHODS = new Set(["exec.approval.request", "exec.approval.resolve"]);
-const NODE_ROLE_METHODS = new Set(["node.invoke.result", "node.event", "skills.bins"]);
+const APPROVAL_METHODS = new Set([
+  "exec.approval.request",
+  "exec.approval.resolve",
+]);
+const NODE_ROLE_METHODS = new Set([
+  "node.invoke.result",
+  "node.event",
+  "skills.bins",
+]);
 const PAIRING_METHODS = new Set([
   "node.pair.request",
   "node.pair.list",
@@ -71,6 +82,8 @@ const READ_METHODS = new Set([
   "node.list",
   "node.describe",
   "chat.history",
+  "consciousness.state",
+  "consciousness.subscribe",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -86,9 +99,14 @@ const WRITE_METHODS = new Set([
   "node.invoke",
   "chat.send",
   "chat.abort",
+  "consciousness.toggle",
+  "consciousness.test.reminder",
 ]);
 
-function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
+function authorizeGatewayMethod(
+  method: string,
+  client: GatewayRequestOptions["client"],
+) {
   if (!client?.connect) return null;
   const role = client.connect.role ?? "operator";
   const scopes = client.connect.scopes ?? [];
@@ -104,23 +122,41 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
   }
   if (scopes.includes(ADMIN_SCOPE)) return null;
   if (APPROVAL_METHODS.has(method) && !scopes.includes(APPROVALS_SCOPE)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.approvals");
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      "missing scope: operator.approvals",
+    );
   }
   if (PAIRING_METHODS.has(method) && !scopes.includes(PAIRING_SCOPE)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.pairing");
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      "missing scope: operator.pairing",
+    );
   }
-  if (READ_METHODS.has(method) && !(scopes.includes(READ_SCOPE) || scopes.includes(WRITE_SCOPE))) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.read");
+  if (
+    READ_METHODS.has(method) &&
+    !(scopes.includes(READ_SCOPE) || scopes.includes(WRITE_SCOPE))
+  ) {
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      "missing scope: operator.read",
+    );
   }
   if (WRITE_METHODS.has(method) && !scopes.includes(WRITE_SCOPE)) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.write");
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      "missing scope: operator.write",
+    );
   }
   if (APPROVAL_METHODS.has(method)) return null;
   if (PAIRING_METHODS.has(method)) return null;
   if (READ_METHODS.has(method)) return null;
   if (WRITE_METHODS.has(method)) return null;
   if (ADMIN_METHOD_PREFIXES.some((prefix) => method.startsWith(prefix))) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      "missing scope: operator.admin",
+    );
   }
   if (
     method.startsWith("config.") ||
@@ -138,9 +174,15 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method === "sessions.delete" ||
     method === "sessions.compact"
   ) {
-    return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      "missing scope: operator.admin",
+    );
   }
-  return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
+  return errorShape(
+    ErrorCodes.INVALID_REQUEST,
+    "missing scope: operator.admin",
+  );
 }
 
 export const coreGatewayHandlers: GatewayRequestHandlers = {
@@ -168,6 +210,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...usageHandlers,
   ...agentHandlers,
   ...agentsHandlers,
+  ...consciousnessHandlers,
 };
 
 export async function handleGatewayRequest(
@@ -179,7 +222,8 @@ export async function handleGatewayRequest(
     respond(false, undefined, authError);
     return;
   }
-  const handler = opts.extraHandlers?.[req.method] ?? coreGatewayHandlers[req.method];
+  const handler =
+    opts.extraHandlers?.[req.method] ?? coreGatewayHandlers[req.method];
   if (!handler) {
     respond(
       false,
