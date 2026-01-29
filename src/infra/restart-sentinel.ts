@@ -44,6 +44,8 @@ export type RestartSentinelPayload = {
   message?: string | null;
   doctorHint?: string | null;
   stats?: RestartSentinelStats | null;
+  reason?: string | null;
+  durationMs?: number | null;
 };
 
 export type RestartSentinel = {
@@ -54,12 +56,17 @@ export type RestartSentinel = {
 const SENTINEL_FILENAME = "restart-sentinel.json";
 
 export function formatDoctorNonInteractiveHint(
-  env: Record<string, string | undefined> = process.env as Record<string, string | undefined>,
+  env: Record<string, string | undefined> = process.env as Record<
+    string,
+    string | undefined
+  >,
 ): string {
   return `Run: ${formatCliCommand("clawdbot doctor --non-interactive", env)}`;
 }
 
-export function resolveRestartSentinelPath(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveRestartSentinelPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
   return path.join(resolveStateDir(env), SENTINEL_FILENAME);
 }
 
@@ -107,11 +114,25 @@ export async function consumeRestartSentinel(
   return parsed;
 }
 
-export function formatRestartSentinelMessage(payload: RestartSentinelPayload): string {
-  return `GatewayRestart:\n${JSON.stringify(payload, null, 2)}`;
+export function formatRestartSentinelMessage(
+  payload: RestartSentinelPayload,
+): string {
+  const parts = [`Gateway Restart: ${payload.kind} (${payload.status})`];
+  if (payload.reason) {
+    parts.push(`Reason: ${payload.reason}`);
+  }
+  if (payload.message) {
+    parts.push(`Message: ${payload.message}`);
+  }
+  if (payload.doctorHint) {
+    parts.push(`Hint: ${payload.doctorHint}`);
+  }
+  return parts.join("\n");
 }
 
-export function summarizeRestartSentinel(payload: RestartSentinelPayload): string {
+export function summarizeRestartSentinel(
+  payload: RestartSentinelPayload,
+): string {
   const kind = payload.kind;
   const status = payload.status;
   const mode = payload.stats?.mode ? ` (${payload.stats.mode})` : "";

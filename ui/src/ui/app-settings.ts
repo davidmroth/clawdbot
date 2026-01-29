@@ -9,12 +9,27 @@ import { loadExecApprovals } from "./controllers/exec-approvals";
 import { loadPresence } from "./controllers/presence";
 import { loadSessions } from "./controllers/sessions";
 import { loadSkills } from "./controllers/skills";
-import { inferBasePathFromPathname, normalizeBasePath, normalizePath, pathForTab, tabFromPath, type Tab } from "./navigation";
+import {
+  inferBasePathFromPathname,
+  normalizeBasePath,
+  normalizePath,
+  pathForTab,
+  tabFromPath,
+  type Tab,
+} from "./navigation";
 import { saveSettings, type UiSettings } from "./storage";
 import { resolveTheme, type ResolvedTheme, type ThemeMode } from "./theme";
-import { startThemeTransition, type ThemeTransitionContext } from "./theme-transition";
+import {
+  startThemeTransition,
+  type ThemeTransitionContext,
+} from "./theme-transition";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll";
-import { startLogsPolling, stopLogsPolling, startDebugPolling, stopDebugPolling } from "./app-polling";
+import {
+  startLogsPolling,
+  stopLogsPolling,
+  startDebugPolling,
+  stopDebugPolling,
+} from "./app-polling";
 import { refreshChat } from "./app-chat";
 import type { ClawdbotApp } from "./app";
 
@@ -38,7 +53,8 @@ type SettingsHost = {
 export function applySettings(host: SettingsHost, next: UiSettings) {
   const normalized = {
     ...next,
-    lastActiveSessionKey: next.lastActiveSessionKey?.trim() || next.sessionKey.trim() || "main",
+    lastActiveSessionKey:
+      next.lastActiveSessionKey?.trim() || next.sessionKey.trim() || "main",
   };
   host.settings = normalized;
   saveSettings(normalized);
@@ -115,10 +131,14 @@ export function setTab(host: SettingsHost, next: Tab) {
   if (next === "chat") host.chatHasAutoScrolled = false;
   if (next === "logs")
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
-  else stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
+  else
+    stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   if (next === "debug")
-    startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
-  else stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
+    startDebugPolling(
+      host as unknown as Parameters<typeof startDebugPolling>[0],
+    );
+  else
+    stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   void refreshActiveTab(host);
   syncUrlWithTab(host, next, false);
 }
@@ -144,8 +164,10 @@ export function setTheme(
 export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "overview") await loadOverview(host);
   if (host.tab === "channels") await loadChannelsTab(host);
-  if (host.tab === "instances") await loadPresence(host as unknown as ClawdbotApp);
-  if (host.tab === "sessions") await loadSessions(host as unknown as ClawdbotApp);
+  if (host.tab === "instances")
+    await loadPresence(host as unknown as ClawdbotApp);
+  if (host.tab === "sessions")
+    await loadSessions(host as unknown as ClawdbotApp);
   if (host.tab === "cron") await loadCron(host);
   if (host.tab === "skills") await loadSkills(host as unknown as ClawdbotApp);
   if (host.tab === "nodes") {
@@ -177,6 +199,11 @@ export async function refreshActiveTab(host: SettingsHost) {
       true,
     );
   }
+  if (host.tab === "consciousness") {
+    // Dynamic import to avoid cycles if needed, or consistent with controller pattern
+    const { loadConsciousness } = await import("./controllers/consciousness");
+    await loadConsciousness(host as unknown as any);
+  }
 }
 
 export function inferBasePath() {
@@ -193,7 +220,10 @@ export function syncThemeWithSettings(host: SettingsHost) {
   applyResolvedTheme(host, resolveTheme(host.theme));
 }
 
-export function applyResolvedTheme(host: SettingsHost, resolved: ResolvedTheme) {
+export function applyResolvedTheme(
+  host: SettingsHost,
+  resolved: ResolvedTheme,
+) {
   host.themeResolved = resolved;
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -202,7 +232,8 @@ export function applyResolvedTheme(host: SettingsHost, resolved: ResolvedTheme) 
 }
 
 export function attachThemeListener(host: SettingsHost) {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function")
+    return;
   host.themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
   host.themeMediaHandler = (event) => {
     if (host.theme !== "system") return;
@@ -234,7 +265,8 @@ export function detachThemeListener(host: SettingsHost) {
 
 export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
   if (typeof window === "undefined") return;
-  const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "chat";
+  const resolved =
+    tabFromPath(window.location.pathname, host.basePath) ?? "chat";
   setTabFromRoute(host, resolved);
   syncUrlWithTab(host, resolved, replace);
 }
@@ -263,10 +295,14 @@ export function setTabFromRoute(host: SettingsHost, next: Tab) {
   if (next === "chat") host.chatHasAutoScrolled = false;
   if (next === "logs")
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
-  else stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
+  else
+    stopLogsPolling(host as unknown as Parameters<typeof stopLogsPolling>[0]);
   if (next === "debug")
-    startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
-  else stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
+    startDebugPolling(
+      host as unknown as Parameters<typeof startDebugPolling>[0],
+    );
+  else
+    stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   if (host.connected) void refreshActiveTab(host);
 }
 

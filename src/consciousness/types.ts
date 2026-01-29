@@ -17,7 +17,12 @@ export type ConsciousnessEventType =
   | "HEARTBEAT"
   | "USER_MESSAGE";
 
-export type AgentDecision = "notify" | "schedule" | "ignore" | "pending";
+export type AgentDecision =
+  | "notify"
+  | "schedule"
+  | "skip"
+  | "ignore"
+  | "pending";
 
 export interface ConsciousnessEvent {
   type: ConsciousnessEventType;

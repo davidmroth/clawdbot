@@ -158,6 +158,17 @@ export async function acquireSessionWriteLock(params: {
       const stale =
         !Number.isFinite(createdAt) || Date.now() - createdAt > staleMs;
       const alive = payload?.pid ? isAlive(payload.pid) : false;
+      const isMe = payload?.pid === process.pid;
+      const isHeldByMe = HELD_LOCKS.has(normalizedSessionFile);
+
+      // If I own the lock file (pid match) but don't have it in memory,
+      // it's a zombie lock from a crash/restart. Recover it.
+      if (isMe && !isHeldByMe) {
+        lockDebug(`RECOVERING own orphaned lock: ${lockPath}`);
+        await fs.rm(lockPath, { force: true });
+        continue;
+      }
+
       lockDebug(
         `BLOCKED by existing lock: ${lockPath} owner_pid=${payload?.pid} stale=${stale} alive=${alive} attempt=${attempt} waiting_caller=[${callerShort}]`,
       );

@@ -67,33 +67,6 @@ export function handleConnected(host: LifecycleHost) {
   }
   // Update mermaid theme when theme changes
   updateMermaidTheme();
-
-  if (host.tab === "consciousness") {
-    const app = host as any;
-    import("./controllers/consciousness").then(
-      ({ loadConsciousnessState, subscribeToConsciousnessEvents }) => {
-        if (app.client) {
-          app.consciousnessLoading = true;
-          loadConsciousnessState(app.client)
-            .then((state: any) => {
-              app.consciousnessEnabled = state.enabled;
-              app.consciousnessLastHeartbeat = state.lastHeartbeat;
-              app.consciousnessTimeline = state.entries;
-              app.consciousnessActiveTasks = state.activeTasks;
-              app.consciousnessPendingReminders = state.pendingReminders;
-              app.requestUpdate();
-            })
-            .catch((err: any) =>
-              console.warn("Failed to auto-load consciousness:", err),
-            )
-            .finally(() => {
-              app.consciousnessLoading = false;
-            });
-          subscribeToConsciousnessEvents(app.client, () => {});
-        }
-      },
-    );
-  }
 }
 
 export function handleFirstUpdated(host: LifecycleHost) {
@@ -153,33 +126,5 @@ export function handleUpdated(
   }
 
   // Auto-load consciousness state when tab is active
-  if (host.tab === "consciousness" && changed.has("tab")) {
-    const app = host as any;
-    // Trigger initial load
-    import("./controllers/consciousness").then(
-      ({ loadConsciousnessState, subscribeToConsciousnessEvents }) => {
-        if (app.client) {
-          app.consciousnessLoading = true;
-          loadConsciousnessState(app.client)
-            .then((state: any) => {
-              app.consciousnessEnabled = state.enabled;
-              app.consciousnessLastHeartbeat = state.lastHeartbeat;
-              app.consciousnessTimeline = state.entries;
-              app.consciousnessActiveTasks = state.activeTasks;
-              app.consciousnessPendingReminders = state.pendingReminders;
-              app.requestUpdate();
-            })
-            .catch((err: any) =>
-              console.warn("Failed to auto-load consciousness:", err),
-            )
-            .finally(() => {
-              app.consciousnessLoading = false;
-            });
-
-          // Ensure subscription is active
-          subscribeToConsciousnessEvents(app.client, () => {});
-        }
-      },
-    );
-  }
+  // Handled by refreshActiveTab in app-settings.ts
 }

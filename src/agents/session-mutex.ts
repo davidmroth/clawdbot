@@ -110,6 +110,23 @@ export function isSessionMutexBusy(sessionFile: string): boolean {
 }
 
 /**
+ * Check if ANY session mutex is currently locked.
+ * Used by consciousness system to yield when any agent run is active.
+ */
+export function hasAnyActiveSessionMutex(): boolean {
+  for (const [path, mutex] of SESSION_MUTEXES.entries()) {
+    if (mutex.isLocked()) {
+      log(`hasAnyActiveSessionMutex: Locked mutex found for ${path}`);
+      return true;
+    }
+  }
+  log(
+    `hasAnyActiveSessionMutex: No active mutexes found (checked ${SESSION_MUTEXES.size} entries)`,
+  );
+  return false;
+}
+
+/**
  * Get the queue length for a session mutex (for debugging/monitoring).
  */
 export function getSessionMutexQueueLength(sessionFile: string): number {

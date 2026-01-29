@@ -122,6 +122,56 @@ export function subscribeToConsciousnessEvents(
 }
 
 /**
+ * Application state interface for Consciousness
+ */
+export interface ConsciousnessApp {
+  client: GatewayBrowserClient | null;
+  connected: boolean;
+  consciousnessLoading: boolean;
+  consciousnessEnabled: boolean;
+  consciousnessLastHeartbeat: number | null;
+  consciousnessTimeline: EventLogEntry[];
+  consciousnessActiveTasks: TrackedTask[];
+  consciousnessPendingReminders: Reminder[];
+  requestUpdate: () => void;
+}
+
+/**
+ * Safely load consciousness state into the app
+ */
+export async function loadConsciousness(app: ConsciousnessApp) {
+  if (!app.client || !app.connected) return;
+  if (app.consciousnessLoading) return;
+
+  app.consciousnessLoading = true;
+  app.requestUpdate();
+
+  try {
+    const result = (await app.client.request("consciousness.state", {})) as {
+      enabled: boolean;
+      lastHeartbeat: number | null;
+      timeline: EventLogEntry[];
+      activeTasks: TrackedTask[];
+      pendingReminders: Reminder[];
+    };
+
+    app.consciousnessEnabled = result.enabled;
+    app.consciousnessLastHeartbeat = result.lastHeartbeat;
+    app.consciousnessTimeline = result.timeline ?? [];
+    app.consciousnessActiveTasks = result.activeTasks ?? [];
+    app.consciousnessPendingReminders = result.pendingReminders ?? [];
+
+    // Ensure we are subscribed to updates
+    subscribeToConsciousnessEvents(app.client, () => {});
+  } catch (err) {
+    console.warn("Failed to auto-load consciousness:", err);
+  } finally {
+    app.consciousnessLoading = false;
+    app.requestUpdate();
+  }
+}
+
+/**
  * Initialize consciousness controller state
  */
 export function createConsciousnessController(): ConsciousnessController {

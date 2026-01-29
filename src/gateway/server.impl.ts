@@ -5,6 +5,7 @@ import {
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
 import { cleanupOrphanedSessionLocks } from "../agents/session-write-lock.js";
+import { hasAnyActiveSessionMutex } from "../agents/session-mutex.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import type { CanvasHostServer } from "../canvas-host/server.js";
@@ -559,6 +560,25 @@ export async function startGatewayServer(
           return;
         }
 
+        // OPTIMIZATION 3: Yield to Active Session Locks
+        // Check if any session mutex is locked - this catches active runs that
+        // may not be tracked in the registry (e.g., cron jobs, other agent runs).
+        // Prevents blocking for extended periods waiting for session file locks.
+        if (hasAnyActiveSessionMutex()) {
+          log.warn("[Consciousness] Yielding due to active session mutex.");
+          if (
+            metadata.eventLogEntryId &&
+            typeof metadata.eventLogEntryId === "string"
+          ) {
+            consciousnessService.eventLog.update(metadata.eventLogEntryId, {
+              agentDecision: "ignore",
+              agentReasoning: "Yielding: Session lock active.",
+            });
+          }
+          return;
+        }
+        log.warn("[Consciousness] passed mutex check, starting run...");
+
         lastConsciousnessRunAt = now;
         const jobId = randomUUID();
         // Use a distinct session scope for consciousness thoughts to allow parallel thinking
@@ -665,9 +685,6 @@ export async function startGatewayServer(
     }
   });
 
-  // Start consciousness
-  consciousnessService.start();
-
   const canvasHostServerPort = (canvasHostServer as CanvasHostServer | null)
     ?.port;
 
@@ -732,6 +749,9 @@ export async function startGatewayServer(
   // Assign refs now that they are available
   broadcastRef = broadcast;
   nodeSendToSessionRef = nodeSendToSession;
+
+  // Start consciousness AFTER refs are assigned so GATEWAY_READY can broadcast
+  consciousnessService.start();
 
   logGatewayStartup({
     cfg: cfgAtStart,

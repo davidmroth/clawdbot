@@ -246,10 +246,22 @@ export class ConsciousnessService {
     });
 
     // Skip injection for empty prompts (heartbeats with nothing notable)
-    if (!stimulus.trim()) return;
+    if (!stimulus.trim()) {
+      this.eventLog.update(entry.id, {
+        agentDecision: "skip",
+        agentReasoning: "No stimulus content generated.",
+      });
+      return;
+    }
 
     // Skip injection for simple tracking events
-    if (event.type === "TASK_STARTED") return;
+    if (event.type === "TASK_STARTED") {
+      this.eventLog.update(entry.id, {
+        agentDecision: "skip",
+        agentReasoning: "Tracking event only.",
+      });
+      return;
+    }
 
     // Inject prompt to agent if callback is provided
     if (this.deps.injectPrompt) {
