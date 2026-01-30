@@ -97,6 +97,9 @@ export type AppViewState = {
   whatsappLoginQrDataUrl: string | null;
   whatsappLoginConnected: boolean | null;
   whatsappBusy: boolean;
+  signalQrDataUrl: string | null;
+  signalLinkMessage: string | null;
+  signalLinkBusy: boolean;
   nostrProfileFormState: NostrProfileFormState | null;
   nostrProfileAccountId: string | null;
   configFormDirty: boolean;
@@ -164,6 +167,7 @@ export type AppViewState = {
   handleWhatsAppStart: (force: boolean) => Promise<void>;
   handleWhatsAppWait: () => Promise<void>;
   handleWhatsAppLogout: () => Promise<void>;
+  handleSignalLink: () => Promise<void>;
   handleChannelConfigSave: () => Promise<void>;
   handleChannelConfigReload: () => Promise<void>;
   handleNostrProfileEdit: (

@@ -53,9 +53,11 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
           if (name === "AbortError") throw err;
           const described = describeToolExecutionError(err);
           if (described.stack && described.stack !== described.message) {
-            logDebug(`tools: ${normalizedName} failed stack:\n${described.stack}`);
+            logDebug(
+              `tools: ${normalizedName} failed stack:\n${described.stack}`,
+            );
           }
-          logError(`[tools] ${normalizedName} failed: ${described.message}`);
+          logError(`[!][tools] ${normalizedName} failed: ${described.message}`);
           return jsonResult({
             status: "error",
             tool: normalizedName,
@@ -71,7 +73,10 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
 // These tools are intercepted to return a "pending" result instead of executing
 export function toClientToolDefinitions(
   tools: ClientToolDefinition[],
-  onClientToolCall?: (toolName: string, params: Record<string, unknown>) => void,
+  onClientToolCall?: (
+    toolName: string,
+    params: Record<string, unknown>,
+  ) => void,
 ): ToolDefinition[] {
   return tools.map((tool) => {
     const func = tool.function;

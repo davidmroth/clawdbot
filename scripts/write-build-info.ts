@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rootDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const distDir = path.join(rootDir, "dist");
 const pkgPath = path.join(rootDir, "package.json");
 
@@ -18,7 +21,8 @@ const readPackageVersion = () => {
 };
 
 const resolveCommit = () => {
-  const envCommit = process.env.GIT_COMMIT?.trim() || process.env.GIT_SHA?.trim();
+  const envCommit =
+    process.env.GIT_COMMIT?.trim() || process.env.GIT_SHA?.trim();
   if (envCommit) return envCommit;
   try {
     return execSync("git rev-parse HEAD", {
@@ -38,8 +42,19 @@ const commit = resolveCommit();
 const buildInfo = {
   version,
   commit,
-  builtAt: new Date().toISOString(),
+  builtAt: new Date().toLocaleString("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }),
 };
+
+console.log("[build-info]", JSON.stringify(buildInfo));
 
 fs.mkdirSync(distDir, { recursive: true });
 fs.writeFileSync(

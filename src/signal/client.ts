@@ -37,7 +37,11 @@ function normalizeBaseUrl(url: string): string {
   return `http://${trimmed}`.replace(/\/+$/, "");
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+) {
   const fetchImpl = resolveFetch();
   if (!fetchImpl) {
     throw new Error("fetch is not available");
@@ -57,83 +61,130 @@ export async function signalRpcRequest<T = unknown>(
   opts: SignalRpcOptions,
 ): Promise<T> {
   const baseUrl = normalizeBaseUrl(opts.baseUrl);
-  
+
   // PATCH: Route specific methods to REST endpoints for signal-cli-rest-api compatibility
-  let endpoint = `${baseUrl}/api/v1/rpc`;
-  let bodyPayload: string;
+  let endpoint = "";
+  let httpMethod = "POST";
+  let bodyPayload: string = "";
 
   if (method === "send") {
-      endpoint = `${baseUrl}/v2/send`;
-      const restParams = { ...params };
-      // Map 'account' (internal) to 'number' (API expects this for sender)
-      if (restParams.account && !restParams.number) {
-          restParams.number = restParams.account;
-      }
-      // Map 'recipient' (RPC style) to 'recipients' (REST style)
-      if (restParams.recipient && !restParams.recipients) {
-          restParams.recipients = restParams.recipient;
-          delete restParams.recipient;
-      }
-      bodyPayload = JSON.stringify(restParams);
-  } else if (method === "sendTyping") {
-      // Best effort mapping for typing
-      endpoint = `${baseUrl}/v1/typing_indicator/${encodeURIComponent(String(params?.account || ''))}`;
-      const restParams = { ...params };
-      // Remove account from body as it is in URL
+    endpoint = `${baseUrl}/v2/send`;
+    const restParams = { ...params };
+    // Map 'account' (internal) to 'number' (API expects this for sender)
+    if (restParams.account && !restParams.number) {
+      restParams.number = restParams.account;
       delete restParams.account;
-      bodyPayload = JSON.stringify(restParams);
-      // NOTE: If this endpoint doesn't exist on the server, it will 404, but that is acceptable for typing.
+    }
+    // Map 'recipient' (RPC style) to 'recipients' (REST style, must be array)
+    if (restParams.recipient && !restParams.recipients) {
+      restParams.recipients = Array.isArray(restParams.recipient)
+        ? restParams.recipient
+        : [restParams.recipient];
+      delete restParams.recipient;
+    }
+    // Ensure recipients is always an array
+    if (restParams.recipients && !Array.isArray(restParams.recipients)) {
+      restParams.recipients = [restParams.recipients];
+    }
+    bodyPayload = JSON.stringify(restParams);
+    console.log(`[SIGNAL-DEBUG] Sending ${method} payload:`, bodyPayload);
+  } else if (method === "sendTyping") {
+    // PUT /v1/typing-indicator/{number} - show typing
+    endpoint = `${baseUrl}/v1/typing-indicator/${encodeURIComponent(String(params?.account || ""))}`;
+    httpMethod = "PUT";
+    const restParams = { ...params };
+    delete restParams.account;
+    bodyPayload = JSON.stringify(restParams);
+  } else if (method === "sendReceipt") {
+    // POST /v1/receipts/{number}
+    endpoint = `${baseUrl}/v1/receipts/${encodeURIComponent(String(params?.account || ""))}`;
+    const restParams = { ...params };
+    delete restParams.account;
+    bodyPayload = JSON.stringify(restParams);
+  } else if (method === "sendReaction") {
+    // POST /v1/reactions/{number}
+    endpoint = `${baseUrl}/v1/reactions/${encodeURIComponent(String(params?.account || ""))}`;
+    const restParams = { ...params };
+    delete restParams.account;
+    bodyPayload = JSON.stringify(restParams);
+  } else if (method === "version") {
+    // GET /v1/about - returns version info
+    endpoint = `${baseUrl}/v1/about`;
+    httpMethod = "GET";
+    bodyPayload = "";
   } else {
-      // Default to RPC for everything else
-      const id = randomUUID();
-      bodyPayload = JSON.stringify({
-        jsonrpc: "2.0",
-        method,
-        params,
-        id,
-      });
+    // Unsupported method - throw instead of falling back to non-existent RPC
+    throw new Error(
+      `Unsupported Signal API method: ${method}. signal-cli-rest-api does not support JSON-RPC.`,
+    );
   }
 
-  // LOGGING DEBUG
-  console.log(`[SignalRPC] Request: method=${method} endpoint=${endpoint}`);
+  const fetchInit: RequestInit = {
+    method: httpMethod,
+    headers: { "Content-Type": "application/json" },
+  };
+  // Only include body for non-GET requests
+  if (httpMethod !== "GET" && bodyPayload) {
+    fetchInit.body = bodyPayload;
+  }
 
   const res = await fetchWithTimeout(
     endpoint,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: bodyPayload,
-    },
+    fetchInit,
     opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   );
-  if (res.status === 201) {
+
+  // Handle success with no content
+  if (res.status === 201 || res.status === 204) {
     return undefined as T;
   }
+
+  // Check for non-OK responses
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(
+      `Signal API error (${res.status}): ${errorText || res.statusText}`,
+    );
+  }
+
   let text = await res.text();
   if (!text) {
-    throw new Error(`Signal RPC empty response (status ${res.status})`);
+    // Empty response is OK for some endpoints
+    return undefined as T;
   }
 
   // PATCH: Sanitize response (some versions of signal-cli-rest-api leak stdout/progress bars)
-  const jsonStart = text.indexOf('{');
-  const jsonEnd = text.lastIndexOf('}');
-  
+  const jsonStart = text.indexOf("{");
+  const jsonEnd = text.lastIndexOf("}");
+
   // LOGGING
   if (text.trim().length > 0 && (jsonStart === -1 || jsonEnd === -1)) {
-     console.log(`[SignalRPC] Invalid JSON candidate: ${JSON.stringify(text)}`);
+    console.log(`[SignalRPC] Invalid JSON candidate: ${JSON.stringify(text)}`);
   }
 
   if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
-      text = text.slice(jsonStart, jsonEnd + 1);
+    text = text.slice(jsonStart, jsonEnd + 1);
   }
 
-  const parsed = JSON.parse(text) as SignalRpcResponse<T>;
-  if (parsed.error) {
-    const code = parsed.error.code ?? "unknown";
-    const msg = parsed.error.message ?? "Signal RPC error";
-    throw new Error(`Signal RPC ${code}: ${msg}`);
+  const parsed = JSON.parse(text) as Record<string, unknown>;
+
+  // Check for error response (REST or RPC style)
+  if (parsed.error && typeof parsed.error === "object") {
+    const err = parsed.error as { code?: number; message?: string };
+    const code = err.code ?? "unknown";
+    const msg = err.message ?? "Signal API error";
+    throw new Error(`Signal API ${code}: ${msg}`);
   }
-  return parsed.result as T;
+  if (parsed.error && typeof parsed.error === "string") {
+    throw new Error(`Signal API error: ${parsed.error}`);
+  }
+
+  // Return result directly for REST endpoints (not wrapped in result)
+  // RPC would have parsed.result, REST returns data directly
+  if ("result" in parsed) {
+    return parsed.result as T;
+  }
+  return parsed as T;
 }
 
 export async function signalCheck(
@@ -142,7 +193,11 @@ export async function signalCheck(
 ): Promise<{ ok: boolean; status?: number | null; error?: string | null }> {
   const normalized = normalizeBaseUrl(baseUrl);
   try {
-    const res = await fetchWithTimeout(`${normalized}/api/v1/check`, { method: "GET" }, timeoutMs);
+    const res = await fetchWithTimeout(
+      `${normalized}/v1/health`,
+      { method: "GET" },
+      timeoutMs,
+    );
     if (!res.ok) {
       return { ok: false, status: res.status, error: `HTTP ${res.status}` };
     }
@@ -176,7 +231,9 @@ export async function streamSignalEvents(params: {
     signal: params.abortSignal,
   });
   if (!res.ok || !res.body) {
-    throw new Error(`Signal SSE failed (${res.status} ${res.statusText || "error"})`);
+    throw new Error(
+      `Signal SSE failed (${res.status} ${res.statusText || "error"})`,
+    );
   }
 
   const reader = res.body.getReader();
@@ -220,7 +277,9 @@ export async function streamSignalEvents(params: {
       if (field === "event") {
         currentEvent.event = value;
       } else if (field === "data") {
-        currentEvent.data = currentEvent.data ? `${currentEvent.data}\n${value}` : value;
+        currentEvent.data = currentEvent.data
+          ? `${currentEvent.data}\n${value}`
+          : value;
       } else if (field === "id") {
         currentEvent.id = value;
       }

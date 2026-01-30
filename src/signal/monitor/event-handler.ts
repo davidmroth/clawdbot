@@ -20,7 +20,10 @@ import { logInboundDrop, logTypingFailure } from "../../channels/logging.js";
 import { createReplyPrefixContext } from "../../channels/reply-prefix.js";
 import { recordInboundSession } from "../../channels/session.js";
 import { createTypingCallbacks } from "../../channels/typing.js";
-import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
+import {
+  readSessionUpdatedAt,
+  resolveStorePath,
+} from "../../config/sessions.js";
 import { danger, logVerbose, shouldLogVerbose } from "../../globals.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { mediaKindFromMime } from "../../media/constants.js";
@@ -41,12 +44,22 @@ import {
   resolveSignalRecipient,
   resolveSignalSender,
 } from "../identity.js";
-import { sendMessageSignal, sendReadReceiptSignal, sendTypingSignal } from "../send.js";
+import {
+  sendMessageSignal,
+  sendReadReceiptSignal,
+  sendTypingSignal,
+} from "../send.js";
 
-import type { SignalEventHandlerDeps, SignalReceivePayload } from "./event-handler.types.js";
+import type {
+  SignalEventHandlerDeps,
+  SignalReceivePayload,
+} from "./event-handler.types.js";
 
 export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
-  const inboundDebounceMs = resolveInboundDebounceMs({ cfg: deps.cfg, channel: "signal" });
+  const inboundDebounceMs = resolveInboundDebounceMs({
+    cfg: deps.cfg,
+    channel: "signal",
+  });
 
   type SignalInboundEntry = {
     senderName: string;
@@ -101,7 +114,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       envelope: envelopeOptions,
     });
     let combinedBody = body;
-    const historyKey = entry.isGroup ? String(entry.groupId ?? "unknown") : undefined;
+    const historyKey = entry.isGroup
+      ? String(entry.groupId ?? "unknown")
+      : undefined;
     if (entry.isGroup && historyKey) {
       combinedBody = buildPendingHistoryContextFromMap({
         historyMap: deps.groupHistories,
@@ -122,7 +137,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           }),
       });
     }
-    const signalTo = entry.isGroup ? `group:${entry.groupId}` : `signal:${entry.senderRecipient}`;
+    const signalTo = entry.isGroup
+      ? `group:${entry.groupId}`
+      : `signal:${entry.senderRecipient}`;
     const ctxPayload = finalizeInboundContext({
       Body: combinedBody,
       RawBody: entry.bodyText,
@@ -169,10 +186,15 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
 
     if (shouldLogVerbose()) {
       const preview = body.slice(0, 200).replace(/\\n/g, "\\\\n");
-      logVerbose(`signal inbound: from=${ctxPayload.From} len=${body.length} preview="${preview}"`);
+      logVerbose(
+        `signal inbound: from=${ctxPayload.From} len=${body.length} preview="${preview}"`,
+      );
     }
 
-    const prefixContext = createReplyPrefixContext({ cfg: deps.cfg, agentId: route.agentId });
+    const prefixContext = createReplyPrefixContext({
+      cfg: deps.cfg,
+      agentId: route.agentId,
+    });
 
     const typingCallbacks = createTypingCallbacks({
       start: async () => {
@@ -193,27 +215,31 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       },
     });
 
-    const { dispatcher, replyOptions, markDispatchIdle } = createReplyDispatcherWithTyping({
-      responsePrefix: prefixContext.responsePrefix,
-      responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
-      humanDelay: resolveHumanDelayConfig(deps.cfg, route.agentId),
-      deliver: async (payload) => {
-        await deps.deliverReplies({
-          replies: [payload],
-          target: ctxPayload.To,
-          baseUrl: deps.baseUrl,
-          account: deps.account,
-          accountId: deps.accountId,
-          runtime: deps.runtime,
-          maxBytes: deps.mediaMaxBytes,
-          textLimit: deps.textLimit,
-        });
-      },
-      onError: (err, info) => {
-        deps.runtime.error?.(danger(`signal ${info.kind} reply failed: ${String(err)}`));
-      },
-      onReplyStart: typingCallbacks.onReplyStart,
-    });
+    const { dispatcher, replyOptions, markDispatchIdle } =
+      createReplyDispatcherWithTyping({
+        responsePrefix: prefixContext.responsePrefix,
+        responsePrefixContextProvider:
+          prefixContext.responsePrefixContextProvider,
+        humanDelay: resolveHumanDelayConfig(deps.cfg, route.agentId),
+        deliver: async (payload) => {
+          await deps.deliverReplies({
+            replies: [payload],
+            target: ctxPayload.To,
+            baseUrl: deps.baseUrl,
+            account: deps.account,
+            accountId: deps.accountId,
+            runtime: deps.runtime,
+            maxBytes: deps.mediaMaxBytes,
+            textLimit: deps.textLimit,
+          });
+        },
+        onError: (err, info) => {
+          deps.runtime.error?.(
+            danger(`signal ${info.kind} reply failed: ${String(err)}`),
+          );
+        },
+        onReplyStart: typingCallbacks.onReplyStart,
+      });
 
     const { queuedFinal } = await dispatchInboundMessage({
       ctx: ctxPayload,
@@ -222,7 +248,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       replyOptions: {
         ...replyOptions,
         disableBlockStreaming:
-          typeof deps.blockStreaming === "boolean" ? !deps.blockStreaming : undefined,
+          typeof deps.blockStreaming === "boolean"
+            ? !deps.blockStreaming
+            : undefined,
         onModelSelected: (ctx) => {
           prefixContext.onModelSelected(ctx);
         },
@@ -251,7 +279,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
   const inboundDebouncer = createInboundDebouncer<SignalInboundEntry>({
     debounceMs: inboundDebounceMs,
     buildKey: (entry) => {
-      const conversationId = entry.isGroup ? (entry.groupId ?? "unknown") : entry.senderPeerId;
+      const conversationId = entry.isGroup
+        ? (entry.groupId ?? "unknown")
+        : entry.senderPeerId;
       if (!conversationId || !entry.senderPeerId) return null;
       return `signal:${deps.accountId}:${conversationId}:${entry.senderPeerId}`;
     },
@@ -285,6 +315,11 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
   });
 
   return async (event: { event?: string; data?: string }) => {
+    // DEBUG: Log all events entering handler
+    console.log(
+      `[SIGNAL-EVENT-DEBUG] Event received: event=${event.event} hasData=${!!event.data}`,
+    );
+
     if (event.event !== "receive" || !event.data) return;
 
     let payload: SignalReceivePayload | null = null;
@@ -294,23 +329,48 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       deps.runtime.error?.(`failed to parse event: ${String(err)}`);
       return;
     }
+
+    // DEBUG: Log parsed payload
+    console.log(
+      `[SIGNAL-EVENT-DEBUG] Payload parsed: hasEnvelope=${!!payload?.envelope} hasDataMessage=${!!payload?.envelope?.dataMessage} hasSyncMessage=${!!payload?.envelope?.syncMessage}`,
+    );
+
     if (payload?.exception?.message) {
       deps.runtime.error?.(`receive exception: ${payload.exception.message}`);
     }
     const envelope = payload?.envelope;
-    if (!envelope) return;
-    
+    if (!envelope) {
+      console.log(`[SIGNAL-EVENT-DEBUG] No envelope, returning`);
+      return;
+    }
+
     // PATCH: Allow Note to Self (synced messages)
     // if (envelope.syncMessage) return;
 
     const sender = resolveSignalSender(envelope);
-    if (!sender) return;
-    if (deps.account && sender.kind === "phone") {
-        // PATCH: Allow if it's a sync message
-      if (sender.e164 === normalizeE164(deps.account) && !envelope.syncMessage) return;
+    if (!sender) {
+      console.log(`[SIGNAL-EVENT-DEBUG] No sender resolved, returning`);
+      return;
     }
 
-    const dataMessage = envelope.dataMessage ?? envelope.editMessage?.dataMessage;
+    // DEBUG: Log sender info
+    console.log(
+      `[SIGNAL-EVENT-DEBUG] Sender resolved: kind=${sender.kind} id=${sender.kind === "phone" ? sender.e164 : sender.raw}`,
+    );
+
+    if (deps.account && sender.kind === "phone") {
+      // PATCH: Allow if it's a sync message
+      if (
+        sender.e164 === normalizeE164(deps.account) &&
+        !envelope.syncMessage
+      ) {
+        console.log(`[SIGNAL-EVENT-DEBUG] Sender is self, returning`);
+        return;
+      }
+    }
+
+    const dataMessage =
+      envelope.dataMessage ?? envelope.editMessage?.dataMessage;
     const reaction = deps.isSignalReactionMessage(envelope.reactionMessage)
       ? envelope.reactionMessage
       : deps.isSignalReactionMessage(dataMessage?.reaction)
@@ -319,7 +379,8 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     const messageText = (dataMessage?.message ?? "").trim();
     const quoteText = dataMessage?.quote?.text?.trim() ?? "";
     const hasBodyContent =
-      Boolean(messageText || quoteText) || Boolean(!reaction && dataMessage?.attachments?.length);
+      Boolean(messageText || quoteText) ||
+      Boolean(!reaction && dataMessage?.attachments?.length);
 
     if (reaction && !hasBodyContent) {
       if (reaction.isRemove) return; // Ignore reaction removals
@@ -350,7 +411,9 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           id: isGroup ? (groupId ?? "unknown") : senderPeerId,
         },
       });
-      const groupLabel = isGroup ? `${groupName ?? "Signal Group"} id:${groupId}` : undefined;
+      const groupLabel = isGroup
+        ? `${groupName ?? "Signal Group"} id:${groupId}`
+        : undefined;
       const messageId = reaction.targetSentTimestamp
         ? String(reaction.targetSentTimestamp)
         : "unknown";
@@ -387,16 +450,34 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     const groupId = dataMessage.groupInfo?.groupId ?? undefined;
     const groupName = dataMessage.groupInfo?.groupName ?? undefined;
     const isGroup = Boolean(groupId);
-    const storeAllowFrom = await readChannelAllowFromStore("signal").catch(() => []);
+    const storeAllowFrom = await readChannelAllowFromStore("signal").catch(
+      () => [],
+    );
     const effectiveDmAllow = [...deps.allowFrom, ...storeAllowFrom];
     const effectiveGroupAllow = [...deps.groupAllowFrom, ...storeAllowFrom];
     const dmAllowed =
-      deps.dmPolicy === "open" ? true : isSignalSenderAllowed(sender, effectiveDmAllow);
+      deps.dmPolicy === "open"
+        ? true
+        : isSignalSenderAllowed(sender, effectiveDmAllow);
+
+    // DEBUG: Log DM policy check
+    console.log(
+      `[SIGNAL-EVENT-DEBUG] DM check: isGroup=${isGroup} dmPolicy=${deps.dmPolicy} dmAllowed=${dmAllowed} senderId=${senderAllowId}`,
+    );
 
     if (!isGroup) {
-      if (deps.dmPolicy === "disabled") return;
+      if (deps.dmPolicy === "disabled") {
+        console.log(`[SIGNAL-EVENT-DEBUG] DM disabled, returning`);
+        return;
+      }
       if (!dmAllowed) {
+        console.log(
+          `[SIGNAL-EVENT-DEBUG] DM not allowed, checking pairing policy...`,
+        );
         if (deps.dmPolicy === "pairing") {
+          console.log(
+            `[SIGNAL-EVENT-DEBUG] DM policy is pairing, calling upsertChannelPairingRequest...`,
+          );
           const senderId = senderAllowId;
           const { code, created } = await upsertChannelPairingRequest({
             channel: "signal",
@@ -421,11 +502,15 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
                 },
               );
             } catch (err) {
-              logVerbose(`signal pairing reply failed for ${senderId}: ${String(err)}`);
+              logVerbose(
+                `signal pairing reply failed for ${senderId}: ${String(err)}`,
+              );
             }
           }
         } else {
-          logVerbose(`Blocked signal sender ${senderDisplay} (dmPolicy=${deps.dmPolicy})`);
+          logVerbose(
+            `Blocked signal sender ${senderDisplay} (dmPolicy=${deps.dmPolicy})`,
+          );
         }
         return;
       }
@@ -436,29 +521,47 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     }
     if (isGroup && deps.groupPolicy === "allowlist") {
       if (effectiveGroupAllow.length === 0) {
-        logVerbose("Blocked signal group message (groupPolicy: allowlist, no groupAllowFrom)");
+        logVerbose(
+          "Blocked signal group message (groupPolicy: allowlist, no groupAllowFrom)",
+        );
         return;
       }
       if (!isSignalSenderAllowed(sender, effectiveGroupAllow)) {
-        logVerbose(`Blocked signal group sender ${senderDisplay} (not in groupAllowFrom)`);
+        logVerbose(
+          `Blocked signal group sender ${senderDisplay} (not in groupAllowFrom)`,
+        );
         return;
       }
     }
 
     const useAccessGroups = deps.cfg.commands?.useAccessGroups !== false;
-    const ownerAllowedForCommands = isSignalSenderAllowed(sender, effectiveDmAllow);
-    const groupAllowedForCommands = isSignalSenderAllowed(sender, effectiveGroupAllow);
+    const ownerAllowedForCommands = isSignalSenderAllowed(
+      sender,
+      effectiveDmAllow,
+    );
+    const groupAllowedForCommands = isSignalSenderAllowed(
+      sender,
+      effectiveGroupAllow,
+    );
     const hasControlCommandInMessage = hasControlCommand(messageText, deps.cfg);
     const commandGate = resolveControlCommandGate({
       useAccessGroups,
       authorizers: [
-        { configured: effectiveDmAllow.length > 0, allowed: ownerAllowedForCommands },
-        { configured: effectiveGroupAllow.length > 0, allowed: groupAllowedForCommands },
+        {
+          configured: effectiveDmAllow.length > 0,
+          allowed: ownerAllowedForCommands,
+        },
+        {
+          configured: effectiveGroupAllow.length > 0,
+          allowed: groupAllowedForCommands,
+        },
       ],
       allowTextCommands: true,
       hasControlCommand: hasControlCommandInMessage,
     });
-    const commandAuthorized = isGroup ? commandGate.commandAuthorized : dmAllowed;
+    const commandAuthorized = isGroup
+      ? commandGate.commandAuthorized
+      : dmAllowed;
     if (isGroup && commandGate.shouldBlock) {
       logInboundDrop({
         log: logVerbose,
@@ -485,7 +588,8 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         });
         if (fetched) {
           mediaPath = fetched.path;
-          mediaType = fetched.contentType ?? firstAttachment.contentType ?? undefined;
+          mediaType =
+            fetched.contentType ?? firstAttachment.contentType ?? undefined;
         }
       } catch (err) {
         deps.runtime.error?.(danger(`attachment fetch failed: ${String(err)}`));
@@ -494,9 +598,11 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
 
     const kind = mediaKindFromMime(mediaType ?? undefined);
     if (kind) placeholder = `<media:${kind}>`;
-    else if (dataMessage.attachments?.length) placeholder = "<media:attachment>";
+    else if (dataMessage.attachments?.length)
+      placeholder = "<media:attachment>";
 
-    const bodyText = messageText || placeholder || dataMessage.quote?.text?.trim() || "";
+    const bodyText =
+      messageText || placeholder || dataMessage.quote?.text?.trim() || "";
     if (!bodyText) return;
 
     const receiptTimestamp =
@@ -505,15 +611,26 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         : typeof dataMessage.timestamp === "number"
           ? dataMessage.timestamp
           : undefined;
-    if (deps.sendReadReceipts && !deps.readReceiptsViaDaemon && !isGroup && receiptTimestamp) {
+    if (
+      deps.sendReadReceipts &&
+      !deps.readReceiptsViaDaemon &&
+      !isGroup &&
+      receiptTimestamp
+    ) {
       try {
-        await sendReadReceiptSignal(`signal:${senderRecipient}`, receiptTimestamp, {
-          baseUrl: deps.baseUrl,
-          account: deps.account,
-          accountId: deps.accountId,
-        });
+        await sendReadReceiptSignal(
+          `signal:${senderRecipient}`,
+          receiptTimestamp,
+          {
+            baseUrl: deps.baseUrl,
+            account: deps.account,
+            accountId: deps.accountId,
+          },
+        );
       } catch (err) {
-        logVerbose(`signal read receipt failed for ${senderDisplay}: ${String(err)}`);
+        logVerbose(
+          `signal read receipt failed for ${senderDisplay}: ${String(err)}`,
+        );
       }
     } else if (
       deps.sendReadReceipts &&
@@ -521,12 +638,16 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       !isGroup &&
       !receiptTimestamp
     ) {
-      logVerbose(`signal read receipt skipped (missing timestamp) for ${senderDisplay}`);
+      logVerbose(
+        `signal read receipt skipped (missing timestamp) for ${senderDisplay}`,
+      );
     }
 
     const senderName = envelope.sourceName ?? senderDisplay;
     const messageId =
-      typeof envelope.timestamp === "number" ? String(envelope.timestamp) : undefined;
+      typeof envelope.timestamp === "number"
+        ? String(envelope.timestamp)
+        : undefined;
     await inboundDebouncer.enqueue({
       senderName,
       senderDisplay,

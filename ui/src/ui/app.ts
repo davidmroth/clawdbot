@@ -76,6 +76,7 @@ import {
   handleNostrProfileImport as handleNostrProfileImportInternal,
   handleNostrProfileSave as handleNostrProfileSaveInternal,
   handleNostrProfileToggleAdvanced as handleNostrProfileToggleAdvancedInternal,
+  handleSignalLink as handleSignalLinkInternal,
   handleWhatsAppLogout as handleWhatsAppLogoutInternal,
   handleWhatsAppStart as handleWhatsAppStartInternal,
   handleWhatsAppWait as handleWhatsAppWaitInternal,
@@ -197,6 +198,9 @@ export class ClawdbotApp extends LitElement {
   @state() whatsappLoginQrDataUrl: string | null = null;
   @state() whatsappLoginConnected: boolean | null = null;
   @state() whatsappBusy = false;
+  @state() signalQrDataUrl: string | null = null;
+  @state() signalLinkMessage: string | null = null;
+  @state() signalLinkBusy = false;
   @state() nostrProfileFormState: NostrProfileFormState | null = null;
   @state() nostrProfileAccountId: string | null = null;
 
@@ -427,6 +431,10 @@ export class ClawdbotApp extends LitElement {
 
   async handleWhatsAppLogout() {
     await handleWhatsAppLogoutInternal(this);
+  }
+
+  async handleSignalLink() {
+    await handleSignalLinkInternal(this);
   }
 
   async handleChannelConfigSave() {

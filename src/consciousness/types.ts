@@ -22,7 +22,8 @@ export type AgentDecision =
   | "schedule"
   | "skip"
   | "ignore"
-  | "pending";
+  | "pending"
+  | "filtered"; // System-determined skip (not agent decision)
 
 export interface ConsciousnessEvent {
   type: ConsciousnessEventType;

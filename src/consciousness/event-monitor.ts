@@ -15,6 +15,7 @@ export class EventMonitor {
   private lastUserMessageAt: number | null = null;
   private userSilenceThreshold = 10 * 60 * 1000; // 10 minutes
   private onEventCallback: EventEmitter | null = null;
+  private hasStartedOnce = false; // Track if this is a resume vs first start
 
   constructor(heartbeatIntervalMs = 60000) {
     this.heartbeatInterval = heartbeatIntervalMs;
@@ -32,7 +33,11 @@ export class EventMonitor {
    */
   start(): void {
     this.startHeartbeat();
-    this.emit({ type: "GATEWAY_READY", timestamp: Date.now() });
+    // Only emit GATEWAY_READY on first start, not on resume
+    if (!this.hasStartedOnce) {
+      this.hasStartedOnce = true;
+      this.emit({ type: "GATEWAY_READY", timestamp: Date.now() });
+    }
   }
 
   /**

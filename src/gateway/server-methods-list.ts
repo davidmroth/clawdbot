@@ -5,6 +5,7 @@ const BASE_METHODS = [
   "logs.tail",
   "channels.status",
   "channels.logout",
+  "channels.signal.link",
   "status",
   "usage.status",
   "usage.cost",
@@ -84,7 +85,9 @@ const BASE_METHODS = [
 ];
 
 export function listGatewayMethods(): string[] {
-  const channelMethods = listChannelPlugins().flatMap((plugin) => plugin.gatewayMethods ?? []);
+  const channelMethods = listChannelPlugins().flatMap(
+    (plugin) => plugin.gatewayMethods ?? [],
+  );
   return Array.from(new Set([...BASE_METHODS, ...channelMethods]));
 }
 

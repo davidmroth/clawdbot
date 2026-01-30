@@ -1,16 +1,16 @@
 import type {
-    ChannelAccountSnapshot,
-    ChannelsStatusSnapshot,
-    ConfigUiHints,
-    DiscordStatus,
-    GoogleChatStatus,
-    IMessageStatus,
-    NostrProfile,
-    NostrStatus,
-    SignalStatus,
-    SlackStatus,
-    TelegramStatus,
-    WhatsAppStatus,
+  ChannelAccountSnapshot,
+  ChannelsStatusSnapshot,
+  ConfigUiHints,
+  DiscordStatus,
+  GoogleChatStatus,
+  IMessageStatus,
+  NostrProfile,
+  NostrStatus,
+  SignalStatus,
+  SlackStatus,
+  TelegramStatus,
+  WhatsAppStatus,
 } from "../types";
 import type { NostrProfileFormState } from "./channels.nostr-profile-form";
 
@@ -26,6 +26,9 @@ export type ChannelsProps = {
   whatsappQrDataUrl: string | null;
   whatsappConnected: boolean | null;
   whatsappBusy: boolean;
+  signalQrDataUrl: string | null;
+  signalLinkMessage: string | null;
+  signalLinkBusy: boolean;
   configSchema: unknown | null;
   configSchemaLoading: boolean;
   configForm: Record<string, unknown> | null;
@@ -38,6 +41,7 @@ export type ChannelsProps = {
   onWhatsAppStart: (force: boolean) => void;
   onWhatsAppWait: () => void;
   onWhatsAppLogout: () => void;
+  onSignalLink: () => void;
   onConfigPatch: (path: Array<string | number>, value: unknown) => void;
   onConfigSave: () => void;
   onConfigReload: () => void;

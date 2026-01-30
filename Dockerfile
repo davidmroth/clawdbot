@@ -8,6 +8,8 @@ RUN corepack enable
 
 WORKDIR /app
 
+ENV TZ=America/Chicago
+
 ARG CLAWDBOT_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$CLAWDBOT_DOCKER_APT_PACKAGES" ]; then \
       apt-get update && \
@@ -35,6 +37,7 @@ FROM node:22-bookworm AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production
+ENV TZ=America/Chicago
 
 COPY --from=builder /app/package.json .
 COPY --from=builder /app/dist ./dist
@@ -46,9 +49,6 @@ COPY --from=builder /app/node_modules ./node_modules
 RUN mkdir src
 RUN chown -R node:node ./src
 RUN chown -R node:node ./dist
-
-#COPY . .
-#RUN chown -R node:node .
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)

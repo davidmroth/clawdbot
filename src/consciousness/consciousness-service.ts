@@ -248,7 +248,7 @@ export class ConsciousnessService {
     // Skip injection for empty prompts (heartbeats with nothing notable)
     if (!stimulus.trim()) {
       this.eventLog.update(entry.id, {
-        agentDecision: "skip",
+        agentDecision: "filtered",
         agentReasoning: "No stimulus content generated.",
       });
       return;
@@ -257,7 +257,7 @@ export class ConsciousnessService {
     // Skip injection for simple tracking events
     if (event.type === "TASK_STARTED") {
       this.eventLog.update(entry.id, {
-        agentDecision: "skip",
+        agentDecision: "filtered",
         agentReasoning: "Tracking event only.",
       });
       return;

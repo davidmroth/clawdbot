@@ -35,9 +35,9 @@ export async function runSignalSseLoop({
   };
 
   // PATCH: Use WebSocket for signal-cli-rest-api compatibility
-  let wsBase = baseUrl.replace(/^http/, 'ws');
+  let wsBase = baseUrl.replace(/^http/, "ws");
   if (wsBase.endsWith("/")) wsBase = wsBase.slice(0, -1);
-  const wsUrl = `${wsBase}/v1/receive/${encodeURIComponent(account || '')}`;
+  const wsUrl = `${wsBase}/v1/receive/${encodeURIComponent(account || "")}`;
 
   let reconnectAttempts = 0;
 
@@ -52,42 +52,58 @@ export async function runSignalSseLoop({
 
       runtime.log?.(`Connecting to Signal WebSocket: ${wsUrl}`);
       const ws = new WebSocket(wsUrl);
-      
-      ws.on('open', () => {
+
+      ws.on("open", () => {
         reconnectAttempts = 0;
         logReconnectVerbose("Signal WebSocket connected.");
       });
 
-      ws.on('message', (data) => {
+      ws.on("message", (data) => {
+        const msgStr = data.toString();
+        // DEBUG: Log all incoming WebSocket messages
+        console.log(
+          `[SIGNAL-WS-DEBUG] Received message: ${msgStr.slice(0, 500)}`,
+        );
+
         if (abortSignal?.aborted) {
           ws.close();
           return;
         }
         try {
-           onEvent({
+          onEvent({
             event: "receive",
-            data: data.toString()
-          }); 
+            data: msgStr,
+          });
         } catch (err: any) {
           runtime.error?.(`Error parsing WS message: ${err.message}`);
         }
       });
 
-      ws.on('error', (err) => {
+      ws.on("error", (err) => {
         if (!abortSignal?.aborted) {
-           // runtime.error?.(`Signal WebSocket error: ${err.message}`);
+          runtime.error?.(
+            `Signal WebSocket error: ${err.message} stack=${err.stack}`,
+          );
         }
       });
 
-      ws.on('close', (code, reason) => {
+      ws.on("close", (code, reason) => {
         if (abortSignal?.aborted) return resolve();
+        // Log the reason for the close
+        runtime.error?.(
+          `Signal WebSocket closed details: code=${code} reason=${reason?.toString()}`,
+        );
         reject(new Error(`WebSocket closed: ${code} ${reason}`));
       });
-      
-       abortSignal?.addEventListener('abort', () => {
-        ws.close();
-        resolve();
-      }, { once: true });
+
+      abortSignal?.addEventListener(
+        "abort",
+        () => {
+          ws.close();
+          resolve();
+        },
+        { once: true },
+      );
     });
   };
 
@@ -99,7 +115,9 @@ export async function runSignalSseLoop({
       runtime.error?.(`Signal WS stream error: ${String(err)}`);
       reconnectAttempts += 1;
       const delayMs = computeBackoff(reconnectPolicy, reconnectAttempts);
-      runtime.log?.(`Signal WS connection lost, reconnecting in ${delayMs / 1000}s...`);
+      runtime.log?.(
+        `Signal WS connection lost, reconnecting in ${delayMs / 1000}s...`,
+      );
       try {
         await sleepWithAbort(delayMs, abortSignal);
       } catch (sleepErr) {

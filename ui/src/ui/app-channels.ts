@@ -24,6 +24,75 @@ export async function handleWhatsAppLogout(host: ClawdbotApp) {
   await loadChannels(host, true);
 }
 
+export async function handleSignalLink(host: ClawdbotApp) {
+  if (host.signalLinkBusy || !host.client) return;
+
+  host.signalLinkBusy = true;
+  host.signalLinkMessage = "Generating QR code…";
+  host.signalQrDataUrl = null;
+
+  try {
+    // Request QR code from gateway
+    // Request QR code from gateway
+    const qrResult = (await host.client.request("channels.signal.link", {
+      action: "qrcode",
+    })) as { qrcode?: string; error?: string };
+
+    if (!qrResult.qrcode) {
+      throw new Error(qrResult.error ?? "Failed to generate QR code");
+    }
+
+    // Display QR code as data URL
+    host.signalQrDataUrl = qrResult.qrcode;
+    host.signalLinkMessage =
+      "Scan with Signal mobile: Settings → Linked Devices → +";
+
+    // Scroll QR code into view
+    await host.updateComplete;
+    const qrEl = host.shadowRoot?.getElementById("signal-qr-code");
+    qrEl?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    // Poll for link status (up to 3 minutes)
+    const pollIntervalMs = 5000;
+    const maxAttempts = 36;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+
+      try {
+        const statusResult = (await host.client.request(
+          "channels.signal.link",
+          {
+            action: "status",
+          },
+        )) as {
+          linked?: boolean;
+          accounts?: Array<{ number: string }>;
+          error?: string;
+        };
+
+        if (statusResult.linked && statusResult.accounts?.length) {
+          const number = statusResult.accounts[0].number;
+          host.signalLinkMessage = `✓ Linked to ${number}. Restart gateway to apply.`;
+          host.signalQrDataUrl = null;
+          await loadChannels(host, true);
+          return;
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }
+
+    host.signalLinkMessage = "Link timed out. Click Link Device to try again.";
+    host.signalQrDataUrl = null;
+  } catch (err) {
+    host.signalLinkMessage = `Link failed: ${err instanceof Error ? err.message : String(err)}`;
+    host.signalQrDataUrl = null;
+  } finally {
+    host.signalLinkBusy = false;
+  }
+}
+
 export async function handleChannelConfigSave(host: ClawdbotApp) {
   await saveConfig(host);
   await loadConfig(host);
@@ -64,7 +133,9 @@ export function handleNostrProfileEdit(
   profile: NostrProfile | null,
 ) {
   host.nostrProfileAccountId = accountId;
-  host.nostrProfileFormState = createNostrProfileFormState(profile ?? undefined);
+  host.nostrProfileFormState = createNostrProfileFormState(
+    profile ?? undefined,
+  );
 }
 
 export function handleNostrProfileCancel(host: ClawdbotApp) {
@@ -122,12 +193,16 @@ export async function handleNostrProfileSave(host: ClawdbotApp) {
       },
       body: JSON.stringify(state.values),
     });
-    const data = (await response.json().catch(() => null)) as
-      | { ok?: boolean; error?: string; details?: unknown; persisted?: boolean }
-      | null;
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      error?: string;
+      details?: unknown;
+      persisted?: boolean;
+    } | null;
 
     if (!response.ok || data?.ok === false || !data) {
-      const errorMessage = data?.error ?? `Profile update failed (${response.status})`;
+      const errorMessage =
+        data?.error ?? `Profile update failed (${response.status})`;
       host.nostrProfileFormState = {
         ...state,
         saving: false,
@@ -187,12 +262,17 @@ export async function handleNostrProfileImport(host: ClawdbotApp) {
       },
       body: JSON.stringify({ autoMerge: true }),
     });
-    const data = (await response.json().catch(() => null)) as
-      | { ok?: boolean; error?: string; imported?: NostrProfile; merged?: NostrProfile; saved?: boolean }
-      | null;
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      error?: string;
+      imported?: NostrProfile;
+      merged?: NostrProfile;
+      saved?: boolean;
+    } | null;
 
     if (!response.ok || data?.ok === false || !data) {
-      const errorMessage = data?.error ?? `Profile import failed (${response.status})`;
+      const errorMessage =
+        data?.error ?? `Profile import failed (${response.status})`;
       host.nostrProfileFormState = {
         ...state,
         importing: false,
@@ -205,7 +285,10 @@ export async function handleNostrProfileImport(host: ClawdbotApp) {
     const merged = data.merged ?? data.imported ?? null;
     const nextValues = merged ? { ...state.values, ...merged } : state.values;
     const showAdvanced = Boolean(
-      nextValues.banner || nextValues.website || nextValues.nip05 || nextValues.lud16,
+      nextValues.banner ||
+      nextValues.website ||
+      nextValues.nip05 ||
+      nextValues.lud16,
     );
 
     host.nostrProfileFormState = {

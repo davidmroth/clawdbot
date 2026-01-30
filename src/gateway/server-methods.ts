@@ -163,6 +163,7 @@ function authorizeGatewayMethod(
     method.startsWith("wizard.") ||
     method.startsWith("update.") ||
     method === "channels.logout" ||
+    method === "channels.signal.link" ||
     method === "skills.install" ||
     method === "skills.update" ||
     method === "cron.add" ||

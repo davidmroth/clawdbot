@@ -80,6 +80,11 @@ export type ChatProps = {
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
 
+// Command history for up/down arrow navigation
+const commandHistory: string[] = [];
+let historyIndex = -1;
+let tempDraft = ""; // Stores current draft when navigating history
+
 function renderCompactionIndicator(
   status: CompactionIndicatorStatus | null | undefined,
 ) {
@@ -566,13 +571,84 @@ export function renderChat(props: ChatProps) {
               style="max-height: 50vh; overflow-y: hidden;"
               ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
+                const el = e.target as HTMLTextAreaElement;
+                const val = el.value;
+
+                // Handle Up Arrow for command history
+                if (e.key === "ArrowUp" && !e.shiftKey) {
+                  // Only navigate history if at start of text or empty
+                  if (el.selectionStart === 0 || val === "") {
+                    if (commandHistory.length === 0) return;
+                    e.preventDefault();
+
+                    // Save current draft when first entering history
+                    if (historyIndex === -1) {
+                      tempDraft = val;
+                    }
+
+                    // Move back in history
+                    if (historyIndex < commandHistory.length - 1) {
+                      historyIndex++;
+                      const historicalCmd =
+                        commandHistory[
+                          commandHistory.length - 1 - historyIndex
+                        ];
+                      props.onDraftChange(historicalCmd);
+                      // Position cursor at end after update
+                      requestAnimationFrame(() => {
+                        el.setSelectionRange(
+                          historicalCmd.length,
+                          historicalCmd.length,
+                        );
+                      });
+                    }
+                    return;
+                  }
+                }
+
+                // Handle Down Arrow for command history
+                if (e.key === "ArrowDown" && !e.shiftKey) {
+                  // Only navigate history if at end of text or empty
+                  if (el.selectionStart === val.length || val === "") {
+                    if (historyIndex === -1) return; // Not in history mode
+                    e.preventDefault();
+
+                    historyIndex--;
+                    if (historyIndex === -1) {
+                      // Returned to current draft
+                      props.onDraftChange(tempDraft);
+                      requestAnimationFrame(() => {
+                        el.setSelectionRange(
+                          tempDraft.length,
+                          tempDraft.length,
+                        );
+                      });
+                    } else {
+                      const historicalCmd =
+                        commandHistory[
+                          commandHistory.length - 1 - historyIndex
+                        ];
+                      props.onDraftChange(historicalCmd);
+                      requestAnimationFrame(() => {
+                        el.setSelectionRange(
+                          historicalCmd.length,
+                          historicalCmd.length,
+                        );
+                      });
+                    }
+                    return;
+                  }
+                }
+
+                // Reset history index when typing other keys
+                if (e.key !== "ArrowUp" && e.key !== "ArrowDown") {
+                  historyIndex = -1;
+                }
+
                 if (e.key !== "Enter") return;
                 if (e.isComposing || e.keyCode === 229) return;
                 if (e.shiftKey) return; // Allow Shift+Enter for line breaks
                 if (!props.connected) return;
-
-                const el = e.target as HTMLTextAreaElement;
-                const val = el.value;
 
                 // Snippet Mode Trigger: ``` + Enter
                 if (/(?:^|\n)\s*```\s*$/.test(val)) {
@@ -586,7 +662,23 @@ export function renderChat(props: ChatProps) {
                 }
 
                 e.preventDefault();
-                if (canCompose) props.onSend();
+                if (canCompose) {
+                  // Save to command history before sending
+                  const trimmedVal = val.trim();
+                  if (
+                    trimmedVal &&
+                    (commandHistory.length === 0 ||
+                      commandHistory[commandHistory.length - 1] !== trimmedVal)
+                  ) {
+                    commandHistory.push(trimmedVal);
+                    // Limit history size
+                    if (commandHistory.length > 100) {
+                      commandHistory.shift();
+                    }
+                  }
+                  historyIndex = -1;
+                  props.onSend();
+                }
               }}
               @input=${(e: Event) => {
                 const el = e.target as HTMLTextAreaElement;

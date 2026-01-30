@@ -32,9 +32,15 @@ function buildSkillsSection(params: {
   ];
 }
 
-function buildMemorySection(params: { isMinimal: boolean; availableTools: Set<string> }) {
+function buildMemorySection(params: {
+  isMinimal: boolean;
+  availableTools: Set<string>;
+}) {
   if (params.isMinimal) return [];
-  if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
+  if (
+    !params.availableTools.has("memory_search") &&
+    !params.availableTools.has("memory_get")
+  ) {
     return [];
   }
   return [
@@ -44,7 +50,10 @@ function buildMemorySection(params: { isMinimal: boolean; availableTools: Set<st
   ];
 }
 
-function buildUserIdentitySection(ownerLine: string | undefined, isMinimal: boolean) {
+function buildUserIdentitySection(
+  ownerLine: string | undefined,
+  isMinimal: boolean,
+) {
   if (!ownerLine || isMinimal) return [];
   return ["## User Identity", ownerLine, ""];
 }
@@ -110,10 +119,15 @@ function buildVoiceSection(params: { isMinimal: boolean; ttsHint?: string }) {
   return ["## Voice (TTS)", hint, ""];
 }
 
-function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readToolName: string }) {
+function buildDocsSection(params: {
+  docsPath?: string;
+  isMinimal: boolean;
+  readToolName: string;
+  sandboxEnabled?: boolean;
+}) {
   const docsPath = params.docsPath?.trim();
   if (!docsPath || params.isMinimal) return [];
-  return [
+  const lines = [
     "## Documentation",
     `Clawdbot docs: ${docsPath}`,
     "Mirror: https://docs.clawd.bot",
@@ -121,9 +135,15 @@ function buildDocsSection(params: { docsPath?: string; isMinimal: boolean; readT
     "Community: https://discord.com/invite/clawd",
     "Find new skills: https://clawdhub.com",
     "For Clawdbot behavior, commands, config, or architecture: consult local docs first.",
-    "When diagnosing issues, run `clawdbot status` yourself when possible; only ask the user if you lack access (e.g., sandboxed).",
-    "",
   ];
+  // Skip CLI diagnostics hint in sandbox mode (clawdbot binary not available in container)
+  if (!params.sandboxEnabled) {
+    lines.push(
+      "When diagnosing issues, run `clawdbot status` yourself when possible; only ask the user if you lack access (e.g., sandboxed).",
+    );
+  }
+  lines.push("");
+  return lines;
 }
 
 export function buildAgentSystemPrompt(params: {
@@ -200,7 +220,8 @@ export function buildAgentSystemPrompt(params: {
     nodes: "List/describe/notify/camera/screen on paired nodes",
     cron: "Manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
     message: "Send messages and channel actions",
-    gateway: "Restart, apply config, or run updates on the running Clawdbot process",
+    gateway:
+      "Restart, apply config, or run updates on the running Clawdbot process",
     agents_list: "List agent ids allowed for sessions_spawn",
     sessions_list: "List other sessions (incl. sub-agents) with filters/last",
     sessions_history: "Fetch history for another session/sub-agent",
@@ -278,7 +299,9 @@ export function buildAgentSystemPrompt(params: {
   const execToolName = resolveToolName("exec");
   const processToolName = resolveToolName("process");
   const extraSystemPrompt = params.extraSystemPrompt?.trim();
-  const ownerNumbers = (params.ownerNumbers ?? []).map((value) => value.trim()).filter(Boolean);
+  const ownerNumbers = (params.ownerNumbers ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean);
   const ownerLine =
     ownerNumbers.length > 0
       ? `Owner numbers: ${ownerNumbers.join(", ")}. Treat messages from these numbers as the user.`
@@ -307,7 +330,9 @@ export function buildAgentSystemPrompt(params: {
   const runtimeCapabilities = (runtimeInfo?.capabilities ?? [])
     .map((cap) => String(cap).trim())
     .filter(Boolean);
-  const runtimeCapabilitiesLower = new Set(runtimeCapabilities.map((cap) => cap.toLowerCase()));
+  const runtimeCapabilitiesLower = new Set(
+    runtimeCapabilities.map((cap) => cap.toLowerCase()),
+  );
   const inlineButtonsEnabled = runtimeCapabilitiesLower.has("inlinebuttons");
   const messageChannelOptions = listDeliverableMessageChannels().join("|");
   const promptMode = params.promptMode ?? "full";
@@ -318,12 +343,16 @@ export function buildAgentSystemPrompt(params: {
     readToolName,
   });
   const memorySection = buildMemorySection({ isMinimal, availableTools });
+  const sandboxEnabled = params.sandboxInfo?.enabled ?? false;
   const docsSection = buildDocsSection({
     docsPath: params.docsPath,
     isMinimal,
     readToolName,
+    sandboxEnabled,
   });
-  const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
+  const workspaceNotes = (params.workspaceNotes ?? [])
+    .map((note) => note.trim())
+    .filter(Boolean);
 
   // For "none" mode, return just the basic identity line
   if (promptMode === "none") {
@@ -363,15 +392,20 @@ export function buildAgentSystemPrompt(params: {
     "Keep narration brief and value-dense; avoid repeating obvious steps.",
     "Use plain human language for narration unless in a technical context.",
     "",
-    "## Clawdbot CLI Quick Reference",
-    "Clawdbot is controlled via subcommands. Do not invent commands.",
-    "To manage the Gateway daemon service (start/stop/restart):",
-    "- clawdbot gateway status",
-    "- clawdbot gateway start",
-    "- clawdbot gateway stop",
-    "- clawdbot gateway restart",
-    "If unsure, ask the user to run `clawdbot help` (or `clawdbot gateway --help`) and paste the output.",
-    "",
+    // Skip CLI reference in sandbox mode (clawdbot binary not available in container)
+    ...(sandboxEnabled
+      ? []
+      : [
+          "## Clawdbot CLI Quick Reference",
+          "Clawdbot is controlled via subcommands. Do not invent commands.",
+          "To manage the Gateway daemon service (start/stop/restart):",
+          "- clawdbot gateway status",
+          "- clawdbot gateway start",
+          "- clawdbot gateway stop",
+          "- clawdbot gateway restart",
+          "If unsure, ask the user to run `clawdbot help` (or `clawdbot gateway --help`) and paste the output.",
+          "",
+        ]),
     ...skillsSection,
     ...memorySection,
     // Skip self-update for subagent/none modes
@@ -396,7 +430,9 @@ export function buildAgentSystemPrompt(params: {
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
       ? params.modelAliasLines.join("\n")
       : "",
-    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal ? "" : "",
+    params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
+      ? ""
+      : "",
     "## Workspace",
     `Your working directory is: ${params.workspaceDir}`,
     "Treat this directory as the single global workspace for file operations unless explicitly instructed otherwise.",
@@ -478,7 +514,9 @@ export function buildAgentSystemPrompt(params: {
   if (extraSystemPrompt) {
     // Use "Subagent Context" header for minimal mode (subagents), otherwise "Group Chat Context"
     const contextHeader =
-      promptMode === "minimal" ? "## Subagent Context" : "## Group Chat Context";
+      promptMode === "minimal"
+        ? "## Subagent Context"
+        : "## Group Chat Context";
     lines.push(contextHeader, extraSystemPrompt, "");
   }
   if (params.reactionGuidance) {
@@ -515,7 +553,11 @@ export function buildAgentSystemPrompt(params: {
       const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
       return baseName.toLowerCase() === "soul.md";
     });
-    lines.push("# Project Context", "", "The following project context files have been loaded:");
+    lines.push(
+      "# Project Context",
+      "",
+      "The following project context files have been loaded:",
+    );
     if (hasSoulFile) {
       lines.push(
         "If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.",
@@ -560,7 +602,12 @@ export function buildAgentSystemPrompt(params: {
 
   lines.push(
     "## Runtime",
-    buildRuntimeLine(runtimeInfo, runtimeChannel, runtimeCapabilities, params.defaultThinkLevel),
+    buildRuntimeLine(
+      runtimeInfo,
+      runtimeChannel,
+      runtimeCapabilities,
+      params.defaultThinkLevel,
+    ),
     `Reasoning: ${reasoningLevel} (hidden unless on/stream). Toggle /reasoning; /status shows Reasoning when enabled.`,
   );
 
@@ -593,7 +640,9 @@ export function buildRuntimeLine(
         : "",
     runtimeInfo?.node ? `node=${runtimeInfo.node}` : "",
     runtimeInfo?.model ? `model=${runtimeInfo.model}` : "",
-    runtimeInfo?.defaultModel ? `default_model=${runtimeInfo.defaultModel}` : "",
+    runtimeInfo?.defaultModel
+      ? `default_model=${runtimeInfo.defaultModel}`
+      : "",
     runtimeChannel ? `channel=${runtimeChannel}` : "",
     runtimeChannel
       ? `capabilities=${runtimeCapabilities.length > 0 ? runtimeCapabilities.join(",") : "none"}`

@@ -129,7 +129,9 @@ export function registerPairingCli(program: Command) {
         code: String(resolvedCode),
       });
       if (!approved) {
-        throw new Error(`No pending pairing request found for code: ${String(resolvedCode)}`);
+        throw new Error(
+          `No pending pairing request found for code: ${String(resolvedCode)}. It may have expired or was already approved.`,
+        );
       }
 
       defaultRuntime.log(

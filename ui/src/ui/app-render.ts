@@ -295,6 +295,9 @@ export function renderApp(state: AppViewState) {
               whatsappQrDataUrl: state.whatsappLoginQrDataUrl,
               whatsappConnected: state.whatsappLoginConnected,
               whatsappBusy: state.whatsappBusy,
+              signalQrDataUrl: state.signalQrDataUrl ?? null,
+              signalLinkMessage: state.signalLinkMessage ?? null,
+              signalLinkBusy: state.signalLinkBusy ?? false,
               configSchema: state.configSchema,
               configSchemaLoading: state.configSchemaLoading,
               configForm: state.configForm,
@@ -307,6 +310,7 @@ export function renderApp(state: AppViewState) {
               onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
               onWhatsAppWait: () => state.handleWhatsAppWait(),
               onWhatsAppLogout: () => state.handleWhatsAppLogout(),
+              onSignalLink: () => state.handleSignalLink(),
               onConfigPatch: (path, value) =>
                 updateConfigFormValue(state, path, value),
               onConfigSave: () => state.handleChannelConfigSave(),

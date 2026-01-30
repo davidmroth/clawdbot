@@ -101,6 +101,14 @@ const entries: SubCliEntry[] = [
     },
   },
   {
+    name: "signal",
+    description: "Signal channel setup",
+    register: async (program) => {
+      const mod = await import("../signal-cli.js");
+      mod.registerSignalCli(program);
+    },
+  },
+  {
     name: "node",
     description: "Node control",
     register: async (program) => {
