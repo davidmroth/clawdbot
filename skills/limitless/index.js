@@ -1,5 +1,5 @@
 // skills/limitless/index.js
-const https = require('https');
+import https from 'node:https';
 
 // Load config
 let config = {};
@@ -32,11 +32,15 @@ if (!API_KEY) {
 
 async function request(endpoint, params = {}) {
   const url = new URL(`${API_BASE}${endpoint}`);
+  console.log('Debug URL: ' + url.toString());
+  console.log('Debug API_KEY len: ' + (API_KEY ? API_KEY.length : 0));
+  console.log('Params: ' + JSON.stringify(params));
   Object.keys(params).forEach(key => {
     if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
       url.searchParams.append(key, params[key]);
     }
   });
+  console.log('Query string: ' + Array.from(url.searchParams.entries()).map(([k,v]) => `${k}=${v}`).join('&'));
 
   return new Promise((resolve, reject) => {
     const req = https.request(url, {
@@ -49,6 +53,7 @@ async function request(endpoint, params = {}) {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
+        console.log(`Full Response (status ${res.statusCode}): ${data}`);
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
             resolve(JSON.parse(data));
@@ -69,9 +74,8 @@ async function request(endpoint, params = {}) {
 async function search(query, date, limit) {
   try {
     const params = {
-      search: query,
-      limit: limit || 3,
-      includeMarkdown: true
+      q: query,
+      limit: limit || 3
     };
     if (date) params.date = date;
 
@@ -111,8 +115,12 @@ const command = args[0];
 
 if (command === 'search') {
   const query = args[1];
-  const date = args[2];
-  const limit = args[3];
+  let date;
+  let limitStr = args[3] || '3';
+  const limit = parseInt(limitStr, 10);
+  if (args[2] && !args[2].startsWith('--')) {
+    date = args[2];
+  }
   search(query, date, limit);
 } else if (command === 'get') {
   const id = args[1];
