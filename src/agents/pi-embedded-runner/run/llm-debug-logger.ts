@@ -10,6 +10,7 @@ export function createLlmDebugLogger(params: {
   runId: string;
   provider: string;
   modelId: string;
+  systemPrompt?: string; // System prompt to include in llm-req events
 }): LlmDebugLogger | undefined {
   if (!params.runId) return undefined;
 
@@ -23,7 +24,8 @@ export function createLlmDebugLogger(params: {
           provider: params.provider,
           model: params.modelId,
           messages: (context as any).messages,
-          system: (context as any).system,
+          // Use passed-in systemPrompt (from session config), fallback to context.system
+          system: params.systemPrompt ?? (context as any).system,
           tools: (context as any).tools,
           config: (context as any).config,
         };

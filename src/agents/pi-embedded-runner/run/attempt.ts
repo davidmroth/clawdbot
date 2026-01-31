@@ -555,6 +555,7 @@ export async function runEmbeddedAttempt(
         runId: params.runId,
         provider: params.provider,
         modelId: params.modelId,
+        systemPrompt: appendPrompt, // Pass the system prompt string for LLM debug logging
       });
 
       // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
