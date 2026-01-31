@@ -29,6 +29,7 @@ import type {
 import type { DevicePairingList } from "./controllers/devices";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form";
+import type { LlmInteraction } from "./controllers/llm-debug";
 
 export type AppViewState = {
   settings: UiSettings;
@@ -141,6 +142,7 @@ export type AppViewState = {
   debugCallParams: string;
   debugCallResult: string | null;
   debugCallError: string | null;
+  llmDebugHistory: LlmInteraction[];
   consciousnessLoading: boolean;
   consciousnessEnabled: boolean;
   consciousnessLastHeartbeat: number | null;

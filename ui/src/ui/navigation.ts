@@ -7,7 +7,7 @@ export const TAB_GROUPS = [
     tabs: ["overview", "channels", "instances", "sessions", "cron"],
   },
   { label: "Agent", tabs: ["skills", "nodes", "consciousness"] },
-  { label: "Settings", tabs: ["config", "debug", "logs"] },
+  { label: "Settings", tabs: ["config", "debug", "llm", "logs"] },
 ] as const;
 
 export type Tab =
@@ -22,6 +22,7 @@ export type Tab =
   | "chat"
   | "config"
   | "debug"
+  | "llm"
   | "logs";
 
 const TAB_PATHS: Record<Tab, string> = {
@@ -36,6 +37,7 @@ const TAB_PATHS: Record<Tab, string> = {
   chat: "/chat",
   config: "/config",
   debug: "/debug",
+  llm: "/llm",
   logs: "/logs",
 };
 
@@ -126,6 +128,8 @@ export function iconForTab(tab: Tab): IconName {
       return "settings";
     case "debug":
       return "bug";
+    case "llm":
+      return "fileText";
     case "logs":
       return "scrollText";
     default:
@@ -157,6 +161,8 @@ export function titleForTab(tab: Tab) {
       return "Config";
     case "debug":
       return "Debug";
+    case "llm":
+      return "LLM Trace";
     case "logs":
       return "Logs";
     default:
@@ -188,6 +194,8 @@ export function subtitleForTab(tab: Tab) {
       return "Edit ~/.clawdbot/clawdbot.json safely.";
     case "debug":
       return "Gateway snapshots, events, and manual RPC calls.";
+    case "llm":
+      return "Realtime inspection of LLM prompts and responses.";
     case "logs":
       return "Live tail of the gateway file logs.";
     default:

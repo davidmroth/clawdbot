@@ -26,6 +26,7 @@ import { isSubagentSessionKey } from "../../../routing/session-key.js";
 import { resolveUserPath } from "../../../utils.js";
 import { createCacheTrace } from "../../cache-trace.js";
 import { createAnthropicPayloadLogger } from "../../anthropic-payload-log.js";
+import { createLlmDebugLogger } from "./llm-debug-logger.js";
 import { resolveClawdbotAgentDir } from "../../agent-paths.js";
 import { resolveSessionAgentIds } from "../../agent-scope.js";
 import {
@@ -547,9 +548,13 @@ export async function runEmbeddedAttempt(
         sessionId: activeSession.sessionId,
         sessionKey: params.sessionKey,
         provider: params.provider,
-        modelId: params.modelId,
         modelApi: params.model.api,
         workspaceDir: params.workspaceDir,
+      });
+      const llmDebugLogger = createLlmDebugLogger({
+        runId: params.runId,
+        provider: params.provider,
+        modelId: params.modelId,
       });
 
       // Force a stable streamFn reference so vitest can reliably mock @mariozechner/pi-ai.
@@ -575,6 +580,11 @@ export async function runEmbeddedAttempt(
       }
       if (anthropicPayloadLogger) {
         activeSession.agent.streamFn = anthropicPayloadLogger.wrapStreamFn(
+          activeSession.agent.streamFn,
+        );
+      }
+      if (llmDebugLogger) {
+        activeSession.agent.streamFn = llmDebugLogger.wrapStreamFn(
           activeSession.agent.streamFn,
         );
       }

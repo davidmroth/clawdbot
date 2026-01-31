@@ -1,4 +1,7 @@
 import { html, nothing } from "lit";
+import { renderLlmDebug } from "./views/llm-debug";
+// ... (I need to find where to add imports, usually at top)
+// I will just add it.
 
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway";
 import type { AppViewState } from "./app-view-state";
@@ -721,6 +724,14 @@ export function renderApp(state: AppViewState) {
               onCallParamsChange: (next) => (state.debugCallParams = next),
               onRefresh: () => loadDebug(state),
               onCall: () => callDebugMethod(state),
+            })
+          : nothing}
+        ${state.tab === "llm"
+          ? renderLlmDebug({
+              history: state.llmDebugHistory,
+              onClear: () => {
+                state.llmDebugHistory = [];
+              },
             })
           : nothing}
         ${state.tab === "logs"

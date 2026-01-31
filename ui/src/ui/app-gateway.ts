@@ -35,6 +35,7 @@ import {
 import type { ClawdbotApp } from "./app";
 import type { ExecApprovalRequest } from "./controllers/exec-approval";
 import { loadAssistantIdentity } from "./controllers/assistant-identity";
+import { handleLlmEvent } from "./controllers/llm-debug";
 
 type GatewayHost = {
   settings: UiSettings;
@@ -196,11 +197,20 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     host.eventLog = host.eventLogBuffer;
   }
 
+  // Add import at the top (I'll do it via separate chunk if possible, or assume I can't easily multireplace imports effectively without context)
+  // Wait, I can use replace_file_content for imports too if I target them.
+  // But I'll do the logic change first.
+
   if (evt.event === "agent") {
     if (host.onboarding) return;
+    const payload = evt.payload as AgentEventPayload | undefined;
+
+    // Process LLM debug events
+    handleLlmEvent(host as unknown as ClawdbotApp, payload as any);
+
     handleAgentEvent(
       host as unknown as Parameters<typeof handleAgentEvent>[0],
-      evt.payload as AgentEventPayload | undefined,
+      payload,
     );
     return;
   }

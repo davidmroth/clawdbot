@@ -1,6 +1,7 @@
 ---
 name: limitless
 description: Access Limitless Pendant data (Lifelogs) to search and retrieve memories, conversations, and audio transcripts.
+metadata: { "clawdbot": { "emoji": "🧠", "env": ["LIMITLESS_API_KEY"] } }
 ---
 
 # Limitless Skill
