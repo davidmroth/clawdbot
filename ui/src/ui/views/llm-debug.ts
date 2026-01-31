@@ -62,7 +62,70 @@ const ICONS: Record<string, string> = {
   arrow: `<svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`,
   copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
 };
+
+// ============================================================================
+// Export Helpers
+// ============================================================================
+
+function downloadJson(data: unknown, filename: string) {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function turnToExportFormat(turn: Turn) {
+  // Map phase types to export key names (following UI structure)
+  const phaseTypeToKey: Record<string, string> = {
+    user: 'user_message',
+    context: 'context',
+    continuation: 'model_continuation',
+    final_answer: 'final_answer',
+    reasoning: 'reasoning',
+    tools: 'tools',
+  };
+
+  // Core metadata (NOT duplicating context fields which are in the context phase)
+  const formattedTurn: Record<string, any> = {
+    id: turn.id,
+    turnId: turn.turnId,
+    timestamp: turn.timestamp,
+    status: turn.status,
+    durationMs: turn.durationMs,
+    provider: turn.provider,
+    model: turn.model,
+    sourceLabel: turn.sourceLabel,
+    isSystemInitiated: turn.isSystemInitiated,
+    usage: turn.usage,
+  };
+
+  // Dynamically add visible phase contents as top-level properties
+  // This follows the UI structure - if UI phases change, export changes too
+  for (const phase of turn.phases) {
+    if (phase.visible) {
+      const key = phaseTypeToKey[phase.type] ?? phase.type;
+      // For user_message, extract text content instead of raw message object
+      if (phase.type === 'user') {
+        formattedTurn[key] = extractTextContent(phase.content);
+      } else {
+        formattedTurn[key] = phase.content;
+      }
+    }
+  }
+
+  // Include raw interaction data at the end
+  formattedTurn.raw = turn.raw;
+
+  return formattedTurn;
+}
 
 // ============================================================================
 // Data Transformation
@@ -100,10 +163,15 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
 
   // Data extraction
   const systemPrompt = interaction.system;
-  // Identify the "last" user message - usually the last message in history before response
-  // or the last message with role 'user'.
-  const lastUserMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-  const historyMessages = messages.slice(0, messages.length - 1);
+  
+  // Find the actual last user message (role === 'user'), not just the last message in the array
+  // The last message could be a tool result, which is not the user's query
+  const lastUserMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
+  
+  // History is everything except the last user message
+  const lastUserMsgIndex = lastUserMessage ? messages.lastIndexOf(lastUserMessage) : -1;
+  const historyMessages = lastUserMsgIndex > 0 ? messages.slice(0, lastUserMsgIndex) : [];
+  
   const toolDefinitions = interaction.tools || [];
   
   // Parse response for reasoning/thinking
@@ -318,6 +386,35 @@ const styles = html`
       background: var(--trace-accent-bg);
       border-color: var(--trace-accent);
       color: var(--trace-accent);
+    }
+    
+    .controls {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* ========== Export Button (Turn Card) ========== */
+    .turn-export-btn {
+      background: transparent;
+      border: 1px solid var(--trace-card-border);
+      color: var(--trace-text-muted);
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--trace-radius-sm);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      transition: all 0.2s;
+    }
+    .turn-export-btn:hover {
+      background: var(--trace-accent-bg);
+      border-color: var(--trace-accent);
+      color: var(--trace-accent);
+    }
+    .turn-export-btn svg {
+      width: 14px;
+      height: 14px;
     }
 
     /* ========== Turn Card ========== */
@@ -771,7 +868,12 @@ function renderModal(turn: Turn, phase: TurnPhase, onClose: () => void) {
   `;
 }
 
-function renderTurn(turn: Turn, index: number, onPhaseClick: (phase: TurnPhase, turn: Turn) => void) {
+function renderTurn(
+  turn: Turn, 
+  index: number, 
+  onPhaseClick: (phase: TurnPhase, turn: Turn) => void,
+  onExport: (turn: Turn) => void
+) {
   const visiblePhases = turn.phases.filter(p => p.visible);
 
   return html`
@@ -784,11 +886,15 @@ function renderTurn(turn: Turn, index: number, onPhaseClick: (phase: TurnPhase, 
           <span class="turn-badge">${turn.turnId}</span>
           <span style="color: var(--trace-text-muted); font-size: 0.875rem;">${turn.timestamp}</span>
         </div>
-        <div class="turn-meta">
+        <div class="turn-meta" style="display: flex; align-items: center; gap: 1rem;">
           <span>${turn.provider}/${turn.model}</span>
           <span style="color: ${turn.status === 'error' ? 'var(--trace-error)' : 'var(--trace-success)'}">
             ${turn.status === 'pending' ? 'Processing...' : `${turn.durationMs}ms`}
           </span>
+          <button class="turn-export-btn" @click=${(e: Event) => { e.stopPropagation(); onExport(turn); }} title="Export this trace as JSON">
+            <span .innerHTML=${ICONS.download}></span>
+            Export
+          </button>
         </div>
       </div>
       <div class="phase-row">
@@ -809,6 +915,9 @@ export type LlmDebugProps = {
   onClear: () => void;
   onOpenModal: (step: any, turnId: string) => void;
   onCloseModal: () => void;
+  // Export callbacks (optional - will use default behavior if not provided)
+  onExportAll?: () => void;
+  onExportTurn?: (turnId: string) => void;
 };
 
 export function renderLlmDebug(props: LlmDebugProps) {
@@ -828,6 +937,31 @@ export function renderLlmDebug(props: LlmDebugProps) {
     props.onOpenModal(phase, turn.id);
   };
 
+  // Export all traces as JSON
+  const handleExportAll = () => {
+    if (props.onExportAll) {
+      props.onExportAll();
+    } else {
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        traceCount: turns.length,
+        traces: turns.map(turnToExportFormat),
+      };
+      const date = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      downloadJson(exportData, `llm-traces-${date}.json`);
+    }
+  };
+
+  // Export single trace as JSON
+  const handleExportTurn = (turn: Turn) => {
+    if (props.onExportTurn) {
+      props.onExportTurn(turn.id);
+    } else {
+      const exportData = turnToExportFormat(turn);
+      downloadJson(exportData, `llm-trace-${turn.turnId}.json`);
+    }
+  };
+
   return html`
     ${styles}
     <div class="llm-trace-view">
@@ -837,6 +971,12 @@ export function renderLlmDebug(props: LlmDebugProps) {
           <div class="subtitle">Variant A Edition</div>
         </div>
         <div class="controls">
+          ${turns.length > 0 ? html`
+            <button @click=${handleExportAll}>
+              <span style="width: 16px; height: 16px;" .innerHTML=${ICONS.download}></span>
+              Export All
+            </button>
+          ` : nothing}
           <button @click=${props.onClear}>
             <span style="width: 16px; height: 16px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -852,7 +992,7 @@ export function renderLlmDebug(props: LlmDebugProps) {
         </div>
       ` : html`
         <div>
-          ${turns.map((turn, i) => renderTurn(turn, i, handlePhaseClick))}
+          ${turns.map((turn, i) => renderTurn(turn, i, handlePhaseClick, handleExportTurn))}
         </div>
       `}
       ${selectedTurn && selectedPhase ? renderModal(selectedTurn, selectedPhase, props.onCloseModal) : nothing}

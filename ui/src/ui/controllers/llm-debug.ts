@@ -16,6 +16,9 @@ export type LlmInteraction = {
   chunksCount?: number;
   responseText?: string; // Actual LLM response content
   status: "pending" | "complete" | "error";
+  // True for intermediate tool-call-only LLM responses (no user-facing text)
+  // These occur during tool loops before the final response
+  isToolCallOnly?: boolean;
 };
 
 // Partial definition of the event payload we expect from the gateway
@@ -51,6 +54,15 @@ export function handleLlmEvent(state: ClawdbotApp, evt: AgentEventPayload) {
       (x) => x.runId === evt.runId && x.status === "pending",
     );
     if (index !== -1) {
+      // If this is a tool-call-only response (intermediate LLM call during tool loop),
+      // remove it from the history instead of keeping it as a confusing trace
+      if (data.isToolCallOnly) {
+        const history = [...state.llmDebugHistory];
+        history.splice(index, 1);
+        state.llmDebugHistory = history;
+        return;
+      }
+
       const history = [...state.llmDebugHistory];
       history[index] = {
         ...history[index],

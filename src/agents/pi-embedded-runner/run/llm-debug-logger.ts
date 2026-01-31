@@ -50,6 +50,7 @@ export function createLlmDebugLogger(params: {
             let error: unknown = null;
             let usage: unknown = null;
             let responseText = "";
+            let hasToolCalls = false;
 
             try {
               const iterator = originalIterator();
@@ -72,7 +73,8 @@ export function createLlmDebugLogger(params: {
                     usage = normalized.usage;
                   }
                 } else if (normalized?.type === "tool_call") {
-                  // Optional: track tool calls if needed
+                  // Track that we received tool calls (intermediate LLM call, not final response)
+                  hasToolCalls = true;
                 } else if (normalized && "usage" in (normalized as any)) {
                    // Fallback for usage-only chunks
                    if ((normalized as any).usage) {
@@ -86,8 +88,13 @@ export function createLlmDebugLogger(params: {
               error = err;
               throw err;
             } finally {
-              // Fallback: If responseText is empty but we have chunks, try to dump the first chunk to help debug
-              if (!responseText && chunks.length > 0) {
+              // Detect tool-call-only responses (intermediate LLM calls during tool loop)
+              // These are not user-facing responses and should be filtered by the UI
+              const isToolCallOnly = hasToolCalls && !responseText.trim();
+
+              // Fallback: If responseText is empty but we have chunks and it's not a tool call,
+              // try to dump the first chunk to help debug
+              if (!responseText && chunks.length > 0 && !isToolCallOnly) {
                 try {
                   const sample =
                     typeof chunks[0] === "string"
@@ -113,6 +120,8 @@ export function createLlmDebugLogger(params: {
                     responseText.length > 10000
                       ? responseText.slice(0, 10000) + "... [truncated]"
                       : responseText,
+                  // Flag for intermediate tool-call-only responses (no user-facing text)
+                  isToolCallOnly,
                 },
               });
             }
