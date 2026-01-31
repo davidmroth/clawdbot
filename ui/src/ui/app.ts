@@ -249,6 +249,8 @@ export class ClawdbotApp extends LitElement {
   @state() debugCallError: string | null = null;
   @state() llmDebugHistory: import("./controllers/llm-debug").LlmInteraction[] =
     [];
+  @state() llmTraceModalStep: unknown | null = null;
+  @state() llmTraceModalTurnId: string | null = null;
 
   @state() consciousnessLoading = false;
   @state() consciousnessEnabled = true;

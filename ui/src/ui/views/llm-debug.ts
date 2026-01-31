@@ -1048,26 +1048,36 @@ function renderEmptyState() {
 }
 
 // ============================================================================
+// Props Type
+// ============================================================================
+
+export type LlmDebugProps = {
+  history: LlmInteraction[];
+  modalStep: unknown | null;
+  modalTurnId: string | null;
+  onClear: () => void;
+  onOpenModal: (step: TurnStep, turnId: string) => void;
+  onCloseModal: () => void;
+};
+
+// ============================================================================
 // Main Render Export
 // ============================================================================
 
-export type LlmTraceState = {
-  selectedStep: TurnStep | null;
-  selectedTurn: Turn | null;
-};
-
-export function renderLlmDebug(props: {
-  history: LlmInteraction[];
-  onClear: () => void;
-}) {
-  // Local state for modal (using closure pattern for Lit)
-  let selectedStep: TurnStep | null = null;
-  let selectedTurn: Turn | null = null;
-
+export function renderLlmDebug(props: LlmDebugProps) {
   // Transform interactions to turns
   const turns = props.history.map((interaction, i) =>
     interactionToTurn(interaction, props.history.length - 1 - i),
   );
+
+  // Find the selected turn and step for the modal
+  let selectedStep: TurnStep | null = null;
+  let selectedTurn: Turn | null = null;
+
+  if (props.modalStep && props.modalTurnId) {
+    selectedTurn = turns.find((t) => t.id === props.modalTurnId) || null;
+    selectedStep = props.modalStep as TurnStep;
+  }
 
   // Stats
   const totalTurns = turns.length;
@@ -1078,29 +1088,9 @@ export function renderLlmDebug(props: {
   const clearIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
   const traceIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 5h20M2 19h20"/></svg>`;
 
-  // Step click handler - we need to re-render to show modal
-  // In a real Lit component this would be reactive state
+  // Step click handler - uses props callback to update parent state
   const handleStepClick = (step: TurnStep, turn: Turn) => {
-    selectedStep = step;
-    selectedTurn = turn;
-    // Force re-render by dispatching custom event
-    const event = new CustomEvent("llm-trace-modal-open", {
-      detail: { step, turn },
-      bubbles: true,
-      composed: true,
-    });
-    document.dispatchEvent(event);
-  };
-
-  const handleCloseModal = () => {
-    selectedStep = null;
-    selectedTurn = null;
-    document.dispatchEvent(
-      new CustomEvent("llm-trace-modal-close", {
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    props.onOpenModal(step, turn.id);
   };
 
   return html`
@@ -1175,6 +1165,8 @@ export function renderLlmDebug(props: {
     </div>
 
     <!-- Modal (rendered outside main container for z-index) -->
-    ${renderModal(selectedStep, selectedTurn, handleCloseModal)}
+    ${selectedStep && selectedTurn
+      ? renderModal(selectedStep, selectedTurn, props.onCloseModal)
+      : nothing}
   `;
 }

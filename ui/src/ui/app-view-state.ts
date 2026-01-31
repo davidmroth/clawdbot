@@ -143,6 +143,8 @@ export type AppViewState = {
   debugCallResult: string | null;
   debugCallError: string | null;
   llmDebugHistory: LlmInteraction[];
+  llmTraceModalStep: unknown | null;
+  llmTraceModalTurnId: string | null;
   consciousnessLoading: boolean;
   consciousnessEnabled: boolean;
   consciousnessLastHeartbeat: number | null;

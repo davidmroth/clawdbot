@@ -729,8 +729,18 @@ export function renderApp(state: AppViewState) {
         ${state.tab === "llm"
           ? renderLlmDebug({
               history: state.llmDebugHistory,
+              modalStep: state.llmTraceModalStep,
+              modalTurnId: state.llmTraceModalTurnId,
               onClear: () => {
                 state.llmDebugHistory = [];
+              },
+              onOpenModal: (step: unknown, turnId: string) => {
+                state.llmTraceModalStep = step;
+                state.llmTraceModalTurnId = turnId;
+              },
+              onCloseModal: () => {
+                state.llmTraceModalStep = null;
+                state.llmTraceModalTurnId = null;
               },
             })
           : nothing}
