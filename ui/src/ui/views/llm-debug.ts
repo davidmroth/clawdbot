@@ -658,7 +658,7 @@ const styles = html`
       left: 50%;
       transform: translateX(-50%) translateY(-8px);
       padding: 0.5rem 0.75rem;
-      background: var(--trace-text);
+      background: #1e293b;
       color: white;
       font-size: 0.75rem;
       font-weight: 500;
@@ -667,8 +667,9 @@ const styles = html`
       opacity: 0;
       visibility: hidden;
       transition: var(--trace-transition);
-      z-index: 10;
+      z-index: 9999;
       pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
     .step-icon::after {
@@ -678,11 +679,11 @@ const styles = html`
       left: 50%;
       transform: translateX(-50%) translateY(4px);
       border: 6px solid transparent;
-      border-top-color: var(--trace-text);
+      border-top-color: #1e293b;
       opacity: 0;
       visibility: hidden;
       transition: var(--trace-transition);
-      z-index: 10;
+      z-index: 9999;
     }
 
     .step-icon:hover::before,
@@ -702,21 +703,29 @@ const styles = html`
     /* ========== Modal ========== */
     .trace-modal-overlay {
       position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(4px);
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 99999;
       animation: fadeIn 0.2s ease-out;
       padding: 2rem;
+      box-sizing: border-box;
+      isolation: isolate;
     }
 
     .trace-modal {
-      background: var(--trace-card-bg);
+      background: #ffffff;
       border-radius: var(--trace-radius);
-      box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+      box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
       max-width: 800px;
       width: 100%;
       max-height: calc(100vh - 4rem);
@@ -724,6 +733,14 @@ const styles = html`
       display: flex;
       flex-direction: column;
       animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      z-index: 100000;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .trace-modal {
+        background: #1e293b;
+      }
     }
 
     @keyframes modalSlideIn {
