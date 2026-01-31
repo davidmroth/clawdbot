@@ -49,6 +49,7 @@ export function createLlmDebugLogger(params: {
             const chunks: unknown[] = [];
             let error: unknown = null;
             let usage: unknown = null;
+            let responseText = "";
 
             try {
               const iterator = originalIterator();
@@ -57,14 +58,49 @@ export function createLlmDebugLogger(params: {
 
               for await (const chunk of iterable) {
                 chunks.push(chunk);
-                if (
-                  chunk &&
-                  typeof chunk === "object" &&
-                  "usage" in chunk &&
-                  (chunk as any).usage
-                ) {
-                  usage = (chunk as any).usage;
+
+                // Extract text content from chunk
+                if (chunk && typeof chunk === "object") {
+                  // Handle different chunk formats
+                  const c = chunk as any;
+
+                  // Format: { type: "text", text: "..." }
+                  if (c.type === "text" && typeof c.text === "string") {
+                    responseText += c.text;
+                  }
+                  // Format: { delta: { text: "..." } } or { delta: { content: "..." } }
+                  else if (c.delta) {
+                    if (typeof c.delta.text === "string") {
+                      responseText += c.delta.text;
+                    } else if (typeof c.delta.content === "string") {
+                      responseText += c.delta.content;
+                    }
+                  }
+                  // Format: { content: [{ type: "text", text: "..." }] }
+                  else if (Array.isArray(c.content)) {
+                    for (const part of c.content) {
+                      if (
+                        part.type === "text" &&
+                        typeof part.text === "string"
+                      ) {
+                        responseText += part.text;
+                      }
+                    }
+                  }
+                  // Format: { text: "..." } (simple text chunk)
+                  else if (
+                    typeof c.text === "string" &&
+                    c.type !== "tool_use"
+                  ) {
+                    responseText += c.text;
+                  }
+
+                  // Extract usage if present
+                  if ("usage" in c && c.usage) {
+                    usage = c.usage;
+                  }
                 }
+
                 yield chunk;
               }
             } catch (err) {
@@ -80,6 +116,11 @@ export function createLlmDebugLogger(params: {
                   error: error ? String(error) : undefined,
                   usage,
                   chunksCount: chunks.length,
+                  // Include the accumulated response text (truncate if very long)
+                  responseText:
+                    responseText.length > 10000
+                      ? responseText.slice(0, 10000) + "... [truncated]"
+                      : responseText,
                 },
               });
             }

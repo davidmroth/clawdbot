@@ -14,6 +14,7 @@ export type LlmInteraction = {
   responseError?: string;
   responseUsage?: unknown;
   chunksCount?: number;
+  responseText?: string; // Actual LLM response content
   status: "pending" | "complete" | "error";
 };
 
@@ -57,6 +58,7 @@ export function handleLlmEvent(state: ClawdbotApp, evt: AgentEventPayload) {
         responseError: data.error,
         responseUsage: data.usage,
         chunksCount: data.chunksCount,
+        responseText: data.responseText, // Store the actual response text
         status: data.error ? "error" : "complete",
       };
       state.llmDebugHistory = history;

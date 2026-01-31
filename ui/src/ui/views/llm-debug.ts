@@ -10,6 +10,7 @@ import type { LlmInteraction } from "../controllers/llm-debug";
 
 type StepType =
   | "user"
+  | "consciousness"
   | "system"
   | "think"
   | "tools"
@@ -37,6 +38,8 @@ type Turn = {
   model: string;
   steps: TurnStep[];
   raw: LlmInteraction;
+  isSystemInitiated: boolean;
+  sourceLabel: string;
 };
 
 // ============================================================================
@@ -45,6 +48,7 @@ type Turn = {
 
 const STEP_ICONS: Record<StepType, string> = {
   user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  consciousness: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
   system: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`,
   think: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 2.76 1.12 5.26 2.93 7.07L12 22l5.07-4.93A8 8 0 0 0 12 2z"/><path d="M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M12 16v-2"/></svg>`,
   tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
@@ -62,6 +66,27 @@ const ARROW_ICON = `<svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stro
 function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   const steps: TurnStep[] = [];
 
+  // Detect if this is a consciousness/system-initiated message
+  // Check for patterns like [cron:...], "Consciousness Stream", "System Event", etc.
+  const userMessages = (interaction.messages || []).filter(
+    (m: any) => m.role === "user",
+  );
+
+  // Check if the first user message contains consciousness patterns
+  const isSystemInitiated = userMessages.some((msg: any) => {
+    const content = extractTextContent(msg);
+    return (
+      content.includes("[cron:") ||
+      content.includes("Consciousness Stream") ||
+      content.includes("System Event") ||
+      content.includes("Gateway Ready") ||
+      content.includes("GatewayRestart") ||
+      content.includes("[reminder:")
+    );
+  });
+
+  const sourceLabel = isSystemInitiated ? "System" : "User";
+
   // 1. System prompt step (if present)
   if (interaction.system) {
     steps.push({
@@ -73,19 +98,27 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     });
   }
 
-  // 2. User messages
-  const userMessages = (interaction.messages || []).filter(
-    (m: any) => m.role === "user",
-  );
+  // 2. User/Consciousness messages
   if (userMessages.length > 0) {
-    steps.push({
-      type: "user",
-      icon: STEP_ICONS.user,
-      label: "User",
-      tooltip: `User message${userMessages.length > 1 ? "s" : ""}`,
-      details: userMessages,
-      count: userMessages.length > 1 ? userMessages.length : undefined,
-    });
+    if (isSystemInitiated) {
+      steps.push({
+        type: "consciousness",
+        icon: STEP_ICONS.consciousness,
+        label: "Consciousness",
+        tooltip: `System-initiated event${userMessages.length > 1 ? "s" : ""}`,
+        details: userMessages,
+        count: userMessages.length > 1 ? userMessages.length : undefined,
+      });
+    } else {
+      steps.push({
+        type: "user",
+        icon: STEP_ICONS.user,
+        label: "User",
+        tooltip: `User message${userMessages.length > 1 ? "s" : ""}`,
+        details: userMessages,
+        count: userMessages.length > 1 ? userMessages.length : undefined,
+      });
+    }
   }
 
   // 3. Think/Processing step (always present for LLM)
@@ -129,7 +162,7 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     });
   }
 
-  // 6. Assistant messages
+  // 6. Assistant messages (conversation history - prior assistant turns)
   const assistantMessages = (interaction.messages || []).filter(
     (m: any) => m.role === "assistant",
   );
@@ -137,15 +170,15 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     steps.push({
       type: "assistant",
       icon: STEP_ICONS.assistant,
-      label: "Assistant",
-      tooltip: `Assistant response${assistantMessages.length > 1 ? "s" : ""}`,
+      label: "History",
+      tooltip: `${assistantMessages.length} prior assistant message${assistantMessages.length > 1 ? "s" : ""} in context`,
       details: assistantMessages,
       count:
         assistantMessages.length > 1 ? assistantMessages.length : undefined,
     });
   }
 
-  // 7. Final response step
+  // 7. Final response step - includes actual response content when available
   steps.push({
     type: "response",
     icon: STEP_ICONS.response,
@@ -162,6 +195,7 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
       usage: interaction.responseUsage,
       chunksCount: interaction.chunksCount,
       error: interaction.responseError,
+      responseText: interaction.responseText, // Actual LLM response content
     },
   });
 
@@ -191,7 +225,23 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     model: interaction.model,
     steps,
     raw: interaction,
+    isSystemInitiated,
+    sourceLabel,
   };
+}
+
+// Helper to extract text content from a message
+function extractTextContent(msg: any): string {
+  if (typeof msg.content === "string") {
+    return msg.content;
+  }
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text || "")
+      .join(" ");
+  }
+  return "";
 }
 
 // ============================================================================
@@ -398,10 +448,11 @@ const styles = html`
       border-radius: var(--trace-radius);
       box-shadow: var(--trace-shadow);
       margin-bottom: 1.5rem;
-      overflow: hidden;
+      /* Removed overflow:hidden to allow tooltips to escape */
       animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       animation-fill-mode: both;
       transition: var(--trace-transition);
+      position: relative;
     }
 
     .turn-card:hover {
@@ -453,6 +504,16 @@ const styles = html`
         transparent 100%
       );
       border-bottom: 1px solid var(--trace-card-border);
+      position: relative;
+      z-index: 1;
+    }
+
+    .turn-card--system .turn-header {
+      background: linear-gradient(
+        135deg,
+        rgba(139, 92, 246, 0.15) 0%,
+        transparent 100%
+      );
     }
 
     .turn-header__left {
@@ -461,10 +522,30 @@ const styles = html`
       gap: 1rem;
     }
 
-    .turn-number {
+    .turn-source {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .turn-source__icon {
+      width: 24px;
+      height: 24px;
+      color: var(--trace-accent);
+    }
+
+    .turn-source__icon--system {
+      color: #8b5cf6;
+    }
+
+    .turn-source__label {
       font-size: 1rem;
       font-weight: 700;
       color: var(--trace-text);
+    }
+
+    .turn-card--system .turn-source__label {
+      color: #8b5cf6;
     }
 
     .turn-meta {
@@ -528,9 +609,11 @@ const styles = html`
     .step-flow-wrapper {
       padding: 1.5rem;
       overflow-x: auto;
-      overflow-y: hidden;
+      overflow-y: visible;
       scroll-behavior: smooth;
       -webkit-overflow-scrolling: touch;
+      position: relative;
+      z-index: 10;
     }
 
     /* Custom scrollbar */
@@ -843,6 +926,76 @@ const styles = html`
       word-break: break-word;
     }
 
+    .trace-code-block--response {
+      background: linear-gradient(
+        135deg,
+        var(--trace-accent-light) 0%,
+        var(--trace-bg) 100%
+      );
+      border-color: var(--trace-accent);
+      font-family: inherit;
+      font-size: 0.938rem;
+      line-height: 1.7;
+    }
+
+    /* ========== Response Metadata ========== */
+    .trace-response-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+    }
+
+    .trace-response-meta__item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 1rem;
+      background: var(--trace-bg);
+      border: 1px solid var(--trace-card-border);
+      border-radius: var(--trace-radius-sm);
+    }
+
+    .trace-response-meta__item--error {
+      border-color: var(--trace-error);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .trace-response-meta__label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--trace-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .trace-response-meta__value {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--trace-text);
+    }
+
+    .trace-response-meta__value--complete {
+      color: var(--trace-success);
+    }
+
+    .trace-response-meta__value--pending {
+      color: var(--trace-warning);
+    }
+
+    .trace-response-meta__value--error {
+      color: var(--trace-error);
+    }
+
+    .trace-response-note {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: var(--trace-accent-light);
+      border-radius: var(--trace-radius-sm);
+      font-size: 0.813rem;
+      color: var(--trace-text-muted);
+      font-style: italic;
+    }
+
     /* ========== Responsive ========== */
     @media (max-width: 768px) {
       .llm-trace-container {
@@ -953,14 +1106,29 @@ function renderTurnCard(
         ? "turn-meta__duration--error"
         : "";
 
+  // Source icon based on user vs consciousness
+  const sourceIcon = turn.isSystemInitiated
+    ? STEP_ICONS.consciousness
+    : STEP_ICONS.user;
+
   return html`
     <article
-      class="turn-card turn-card--${turn.status}"
+      class="turn-card turn-card--${turn.status} ${turn.isSystemInitiated
+        ? "turn-card--system"
+        : "turn-card--user"}"
       style="animation-delay: ${index * 0.1}s"
     >
       <header class="turn-header">
         <div class="turn-header__left">
-          <span class="turn-number">Turn ${turn.turnNumber}</span>
+          <div class="turn-source">
+            <span
+              class="turn-source__icon ${turn.isSystemInitiated
+                ? "turn-source__icon--system"
+                : ""}"
+              .innerHTML=${sourceIcon}
+            ></span>
+            <span class="turn-source__label">${turn.sourceLabel}</span>
+          </div>
           <div class="turn-meta">
             <span class="turn-meta__model">
               ${turn.provider}/${turn.model}
@@ -992,6 +1160,10 @@ function renderModal(
   if (!step || !turn) return nothing;
 
   const closeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+
+  // For response step, show metadata (actual content not captured in current data structure)
+  const isResponseStep = step.type === "response";
+  const detailsObj = step.details as any;
 
   return html`
     <div
@@ -1025,15 +1197,71 @@ function renderModal(
           </button>
         </header>
         <div class="trace-modal__body">
-          <section class="trace-modal__section">
-            <h3 class="trace-modal__section-title">Content</h3>
-            <pre class="trace-code-block">
+          ${isResponseStep
+            ? html`
+                ${detailsObj.responseText
+                  ? html`
+                      <section class="trace-modal__section">
+                        <h3 class="trace-modal__section-title">
+                          Response Content
+                        </h3>
+                        <pre
+                          class="trace-code-block trace-code-block--response"
+                        >
+${detailsObj.responseText}</pre
+                        >
+                      </section>
+                    `
+                  : nothing}
+                <section class="trace-modal__section">
+                  <h3 class="trace-modal__section-title">Response Metadata</h3>
+                  <div class="trace-response-meta">
+                    <div class="trace-response-meta__item">
+                      <span class="trace-response-meta__label">Status</span>
+                      <span
+                        class="trace-response-meta__value trace-response-meta__value--${detailsObj.status}"
+                        >${detailsObj.status}</span
+                      >
+                    </div>
+                    <div class="trace-response-meta__item">
+                      <span class="trace-response-meta__label">Duration</span>
+                      <span class="trace-response-meta__value"
+                        >${detailsObj.durationMs}ms</span
+                      >
+                    </div>
+                    <div class="trace-response-meta__item">
+                      <span class="trace-response-meta__label">Chunks</span>
+                      <span class="trace-response-meta__value"
+                        >${detailsObj.chunksCount || 0}</span
+                      >
+                    </div>
+                    ${detailsObj.error
+                      ? html`
+                          <div
+                            class="trace-response-meta__item trace-response-meta__item--error"
+                          >
+                            <span class="trace-response-meta__label"
+                              >Error</span
+                            >
+                            <span class="trace-response-meta__value"
+                              >${detailsObj.error}</span
+                            >
+                          </div>
+                        `
+                      : nothing}
+                  </div>
+                </section>
+              `
+            : html`
+                <section class="trace-modal__section">
+                  <h3 class="trace-modal__section-title">Content</h3>
+                  <pre class="trace-code-block">
 ${typeof step.details === "string"
-                ? step.details
-                : JSON.stringify(step.details, null, 2)}</pre
-            >
-          </section>
-
+                      ? step.details
+                      : JSON.stringify(step.details, null, 2)}</pre
+                  >
+                </section>
+              `}
           ${step.type === "response" && turn.raw.responseUsage
             ? html`
                 <section class="trace-modal__section">
