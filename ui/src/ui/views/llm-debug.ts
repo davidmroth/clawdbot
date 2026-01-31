@@ -1,30 +1,30 @@
-// LLM Trace View - Modern Conversation Turn Diagnostic UI
-// A beautiful, animated UI for visualizing LLM conversation turns
+// LLM Trace View - Variant A Edition
+// A clean, intuitive, developer-oriented visualization tool for LLM conversation turns
 
-import { html, nothing } from "lit";
+import { html, nothing, TemplateResult } from "lit";
 import type { LlmInteraction } from "../controllers/llm-debug";
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type StepType =
+type PhaseType =
   | "user"
-  | "consciousness"
-  | "system"
-  | "think"
+  | "context"
+  | "reasoning"
   | "tools"
-  | "tool"
-  | "assistant"
-  | "response";
+  | "continuation"
+  | "final_answer";
 
-type TurnStep = {
-  type: StepType;
+type TurnPhase = {
+  type: PhaseType;
   icon: string;
   label: string;
   tooltip: string;
-  details: unknown;
+  content: unknown;
+  visible: boolean;
   count?: number;
+  status?: "success" | "failure" | "pending";
 };
 
 type Turn = {
@@ -36,43 +36,55 @@ type Turn = {
   durationMs?: number;
   provider: string;
   model: string;
-  steps: TurnStep[];
+  phases: TurnPhase[];
   raw: LlmInteraction;
   isSystemInitiated: boolean;
   sourceLabel: string;
+  // Extracted data for context modal
+  systemPrompt?: string;
+  historyMessages: any[];
+  lastUserMessage?: any;
+  toolDefinitions?: any[];
+  usage?: any;
 };
 
 // ============================================================================
-// Icon Definitions (SVG inline for performance)
+// Icon Definitions
 // ============================================================================
 
-const STEP_ICONS: Record<StepType, string> = {
+const ICONS: Record<string, string> = {
   user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-  consciousness: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
-  system: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`,
-  think: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 2.76 1.12 5.26 2.93 7.07L12 22l5.07-4.93A8 8 0 0 0 12 2z"/><path d="M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M12 16v-2"/></svg>`,
+  context: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+  reasoning: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 2.76 1.12 5.26 2.93 7.07L12 22l5.07-4.93A8 8 0 0 0 12 2z"/><path d="M12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M12 16v-2"/></svg>`,
   tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
-  tool: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
-  assistant: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>`,
-  response: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  continuation: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  final_answer: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  arrow: `<svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
 };
 
-const ARROW_ICON = `<svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+// ============================================================================
+// Data Transformation
+// ============================================================================
 
-// ============================================================================
-// Transform LlmInteraction to Turn format
-// ============================================================================
+function extractTextContent(msg: any): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.content)) {
+    return msg.content
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text || "")
+      .join(" ");
+  }
+  return "";
+}
 
 function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
-  const steps: TurnStep[] = [];
-
-  // Detect if this is a consciousness/system-initiated message
-  // Check for patterns like [cron:...], "Consciousness Stream", "System Event", etc.
-  const userMessages = (interaction.messages || []).filter(
-    (m: any) => m.role === "user",
-  );
-
-  // Check if the first user message contains consciousness patterns
+  const messages = interaction.messages || [];
+  
+  // Identify user vs system initiated
+  // This logic is preserved from original file as it seems app-specific
+  const userMessages = messages.filter((m: any) => m.role === "user");
   const isSystemInitiated = userMessages.some((msg: any) => {
     const content = extractTextContent(msg);
     return (
@@ -84,361 +96,216 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
       content.includes("[reminder:")
     );
   });
-
   const sourceLabel = isSystemInitiated ? "System" : "User";
 
-  // 1. System prompt step (if present)
-  if (interaction.system) {
-    steps.push({
-      type: "system",
-      icon: STEP_ICONS.system,
-      label: "System",
-      tooltip: "System prompt configuration",
-      details: interaction.system,
-    });
+  // Data extraction
+  const systemPrompt = interaction.system;
+  // Identify the "last" user message - usually the last message in history before response
+  // or the last message with role 'user'.
+  const lastUserMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const historyMessages = messages.slice(0, messages.length - 1);
+  const toolDefinitions = interaction.tools || [];
+  
+  // Parse response for reasoning/thinking
+  // Assuming <think> tags or similar if available, otherwise treating all as response for now
+  // In a real implementation, we would parse structured output if the model provides it
+  const fullResponse = interaction.responseText || "";
+  let reasoning = "";
+  let finalAnswer = fullResponse;
+  
+  const thinkMatch = fullResponse.match(/<think>([\s\S]*?)<\/think>/i);
+  if (thinkMatch) {
+    reasoning = thinkMatch[1].trim();
+    finalAnswer = fullResponse.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
   }
 
-  // 2. User/Consciousness messages
-  if (userMessages.length > 0) {
-    if (isSystemInitiated) {
-      steps.push({
-        type: "consciousness",
-        icon: STEP_ICONS.consciousness,
-        label: "Consciousness",
-        tooltip: `System-initiated event${userMessages.length > 1 ? "s" : ""}`,
-        details: userMessages,
-        count: userMessages.length > 1 ? userMessages.length : undefined,
-      });
-    } else {
-      steps.push({
-        type: "user",
-        icon: STEP_ICONS.user,
-        label: "User",
-        tooltip: `User message${userMessages.length > 1 ? "s" : ""}`,
-        details: userMessages,
-        count: userMessages.length > 1 ? userMessages.length : undefined,
-      });
-    }
-  }
+  // Phases construction (Variant A)
+  const phases: TurnPhase[] = [];
 
-  // 3. Think/Processing step (always present for LLM)
-  steps.push({
-    type: "think",
-    icon: STEP_ICONS.think,
-    label: "Think",
-    tooltip: "LLM reasoning and processing",
-    details: {
-      provider: interaction.provider,
-      model: interaction.model,
-      config: interaction.config,
-    },
+  // 1. User Message
+  phases.push({
+    type: "user",
+    icon: ICONS.user,
+    label: "User message",
+    tooltip: "User message",
+    content: lastUserMessage,
+    visible: true,
   });
 
-  // 4. Tools (if any)
-  const tools = interaction.tools || [];
-  if (tools.length > 0) {
-    steps.push({
-      type: "tools",
-      icon: STEP_ICONS.tools,
-      label: "Tools",
-      tooltip: `${tools.length} tool${tools.length > 1 ? "s" : ""} available`,
-      details: tools,
-      count: tools.length > 1 ? tools.length : undefined,
-    });
-  }
-
-  // 5. Tool call messages from conversation
-  const toolMessages = (interaction.messages || []).filter(
-    (m: any) => m.role === "tool" || m.tool_calls,
-  );
-  if (toolMessages.length > 0) {
-    steps.push({
-      type: "tool",
-      icon: STEP_ICONS.tool,
-      label: "Tool Calls",
-      tooltip: `${toolMessages.length} tool interaction${toolMessages.length > 1 ? "s" : ""}`,
-      details: toolMessages,
-      count: toolMessages.length > 1 ? toolMessages.length : undefined,
-    });
-  }
-
-  // 6. Assistant messages (conversation history - prior assistant turns)
-  const assistantMessages = (interaction.messages || []).filter(
-    (m: any) => m.role === "assistant",
-  );
-  if (assistantMessages.length > 0) {
-    steps.push({
-      type: "assistant",
-      icon: STEP_ICONS.assistant,
-      label: "History",
-      tooltip: `${assistantMessages.length} prior assistant message${assistantMessages.length > 1 ? "s" : ""} in context`,
-      details: assistantMessages,
-      count:
-        assistantMessages.length > 1 ? assistantMessages.length : undefined,
-    });
-  }
-
-  // 7. Final response step - includes actual response content when available
-  steps.push({
-    type: "response",
-    icon: STEP_ICONS.response,
-    label: "Response",
-    tooltip:
-      interaction.status === "pending"
-        ? "Awaiting response..."
-        : interaction.status === "error"
-          ? "Error occurred"
-          : `Completed in ${interaction.durationMs}ms`,
-    details: {
-      status: interaction.status,
-      durationMs: interaction.durationMs,
-      usage: interaction.responseUsage,
-      chunksCount: interaction.chunksCount,
-      error: interaction.responseError,
-      responseText: interaction.responseText, // Actual LLM response content
+  // 2. Context (Full Prompt)
+  phases.push({
+    type: "context",
+    icon: ICONS.context,
+    label: "Context",
+    tooltip: "Full context sent to model",
+    content: {
+      systemPrompt,
+      historyMessages,
+      lastUserMessage,
+      toolDefinitions,
+      metadata: {}, // placeholders
     },
+    visible: true,
   });
 
-  // Format timestamp
+  // 3. Reasoning (Think/Plan)
+  phases.push({
+    type: "reasoning",
+    icon: ICONS.reasoning,
+    label: "Reasoning",
+    tooltip: "Think / Plan",
+    content: reasoning,
+    visible: !!reasoning,
+  });
+
+  // 4. Tools
+  // Note: We need actual tool calls from the response, not just definitions.
+  // If `LlmInteraction` doesn't strictly have tool calls in a separate field, 
+  // we check if we can parse them or if they were passed in a previous format.
+  // For now, we will show this phase if there are tools defined, or if we detect calls.
+  // Ideally, we'd have a `toolCalls` field in `LlmInteraction`. 
+  // If not, we might hide this or showing placeholder.
+  // Given requirements, let's assume we can try to find them in the response or future data.
+  const hasToolCalls = false; // Placeholder until we have data for tool calls in this turn
+  phases.push({
+    type: "tools",
+    icon: ICONS.tools,
+    label: "Tools",
+    tooltip: "Tool calls & observations",
+    content: [], 
+    visible: hasToolCalls,
+  });
+
+  // 5. Model Continuation (Raw output)
+  phases.push({
+    type: "continuation",
+    icon: ICONS.continuation,
+    label: "Model continuation",
+    tooltip: "Raw model output after tools",
+    content: fullResponse,
+    visible: true,
+  });
+
+  // 6. Final Answer (Cleaned)
+  phases.push({
+    type: "final_answer",
+    icon: ICONS.final_answer,
+    label: "Final answer",
+    tooltip: "Cleaned response to user",
+    content: finalAnswer,
+    visible: true,
+  });
+
   const date = new Date(interaction.ts);
-  const timestamp = date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-
-  // Generate turn ID
   const turnId = `t-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}-${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}${String(date.getSeconds()).padStart(2, "0")}`;
 
   return {
     id: interaction.id,
     turnNumber: index + 1,
     turnId,
-    timestamp,
+    timestamp: date.toLocaleString(),
     status: interaction.status,
     durationMs: interaction.durationMs,
     provider: interaction.provider,
     model: interaction.model,
-    steps,
+    phases,
     raw: interaction,
     isSystemInitiated,
     sourceLabel,
+    systemPrompt: typeof systemPrompt === "string" ? systemPrompt : JSON.stringify(systemPrompt),
+    historyMessages,
+    lastUserMessage,
+    toolDefinitions,
+    usage: interaction.responseUsage,
   };
 }
 
-// Helper to extract text content from a message
-function extractTextContent(msg: any): string {
-  if (typeof msg.content === "string") {
-    return msg.content;
-  }
-  if (Array.isArray(msg.content)) {
-    return msg.content
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.text || "")
-      .join(" ");
-  }
-  return "";
-}
-
 // ============================================================================
-// Styles (embedded CSS)
+// Styles
 // ============================================================================
 
+// Using global CSS variables from base.css where possible to ensure consistent theming.
+// --bg, --card, --text, --border, --accent (red), --info (blue), --ok (green), --warn (orange)
 const styles = html`
   <style>
-    /* ========== Base Variables ========== */
-    .llm-trace-container {
-      --trace-bg: #f8fafc;
-      --trace-card-bg: #ffffff;
-      --trace-card-border: #e2e8f0;
-      --trace-accent: #3b82f6;
-      --trace-accent-light: #dbeafe;
-      --trace-accent-dark: #1d4ed8;
-      --trace-text: #1e293b;
-      --trace-text-muted: #64748b;
-      --trace-success: #22c55e;
-      --trace-warning: #f59e0b;
-      --trace-error: #ef4444;
-      --trace-shadow:
-        0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-      --trace-shadow-lg:
-        0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-      --trace-radius: 12px;
-      --trace-radius-sm: 8px;
-      --trace-font:
-        system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        sans-serif;
-      --trace-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    /* ========== Variables Local Overrides ========== */
+    .llm-trace-view {
+      /* Map abstract trace vars to global app vars */
+      --trace-bg: var(--bg);
+      --trace-card-bg: var(--card);
+      --trace-card-border: var(--border);
+      --trace-text: var(--text);
+      --trace-text-muted: var(--muted);
+      
+      /* Use Blue for the trace view main accent to distinguish from Red app accent */
+      --trace-accent: var(--info); 
+      --trace-accent-bg: rgba(59, 130, 246, 0.1); /* blue with opacity */
+      
+      --trace-success: var(--ok);
+      --trace-success-bg: var(--ok-subtle);
+      --trace-warning: var(--warn);
+      --trace-error: var(--danger);
+      
+      --trace-font: var(--font-body);
+      --trace-mono: var(--mono);
+      --trace-radius: var(--radius-lg);
+      --trace-radius-sm: var(--radius-sm);
+      --trace-shadow: var(--shadow-sm);
     }
 
-    /* Dark mode support */
-    @media (prefers-color-scheme: dark) {
-      .llm-trace-container {
-        --trace-bg: #0f172a;
-        --trace-card-bg: #1e293b;
-        --trace-card-border: #334155;
-        --trace-text: #f1f5f9;
-        --trace-text-muted: #94a3b8;
-        --trace-accent-light: #1e3a5f;
-      }
-    }
-
-    /* ========== Container ========== */
-    .llm-trace-container {
+    /* ========== Layout ========== */
+    .llm-trace-view {
       font-family: var(--trace-font);
       background: var(--trace-bg);
       min-height: 100%;
       padding: 2rem;
       box-sizing: border-box;
-    }
-
-    .llm-trace-inner {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    /* ========== Header ========== */
-    .trace-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid var(--trace-card-border);
-    }
-
-    .trace-title {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .trace-title h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
       color: var(--trace-text);
+      /* Ensure this container establishes a stacking context? 
+         Actually, we want to avoid trapping the fixed modal if possible, 
+         but since we can't move it out easily, we just ensure z-index is high. */
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    .title h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
       margin: 0;
-      background: linear-gradient(135deg, var(--trace-accent) 0%, #8b5cf6 100%);
+      /* Gradient text */
+      background: linear-gradient(135deg, var(--trace-accent), #8b5cf6);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
 
-    .trace-title-icon {
-      width: 32px;
-      height: 32px;
-      color: var(--trace-accent);
+    .subtitle {
+      font-size: 0.875rem;
+      color: var(--trace-text-muted);
+      margin-top: 0.25rem;
     }
 
-    .trace-actions {
-      display: flex;
-      gap: 0.75rem;
-    }
-
-    .trace-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.625rem 1.25rem;
+    .controls button {
       background: var(--trace-card-bg);
       border: 1px solid var(--trace-card-border);
-      border-radius: var(--trace-radius-sm);
       color: var(--trace-text);
-      font-size: 0.875rem;
-      font-weight: 500;
+      padding: 0.5rem 1rem;
+      border-radius: var(--trace-radius-sm);
       cursor: pointer;
-      transition: var(--trace-transition);
-    }
-
-    .trace-btn:hover {
-      background: var(--trace-accent-light);
-      border-color: var(--trace-accent);
-      color: var(--trace-accent-dark);
-      transform: translateY(-1px);
-    }
-
-    .trace-btn svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    .trace-btn--primary {
-      background: var(--trace-accent);
-      border-color: var(--trace-accent);
-      color: white;
-    }
-
-    .trace-btn--primary:hover {
-      background: var(--trace-accent-dark);
-      border-color: var(--trace-accent-dark);
-      color: white;
-    }
-
-    /* ========== Stats Bar ========== */
-    .trace-stats {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 2rem;
-      flex-wrap: wrap;
-    }
-
-    .trace-stat {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.75rem 1rem;
-      background: var(--trace-card-bg);
-      border: 1px solid var(--trace-card-border);
-      border-radius: var(--trace-radius-sm);
-      font-size: 0.875rem;
+      transition: all 0.2s;
     }
-
-    .trace-stat__value {
-      font-weight: 600;
+    .controls button:hover {
+      background: var(--trace-accent-bg);
+      border-color: var(--trace-accent);
       color: var(--trace-accent);
-    }
-
-    .trace-stat__label {
-      color: var(--trace-text-muted);
-    }
-
-    /* ========== Empty State ========== */
-    .trace-empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 4rem 2rem;
-      text-align: center;
-      background: var(--trace-card-bg);
-      border: 2px dashed var(--trace-card-border);
-      border-radius: var(--trace-radius);
-      animation: fadeIn 0.5s ease-out;
-    }
-
-    .trace-empty__icon {
-      width: 64px;
-      height: 64px;
-      color: var(--trace-text-muted);
-      margin-bottom: 1rem;
-      opacity: 0.5;
-    }
-
-    .trace-empty__text {
-      font-size: 1.125rem;
-      color: var(--trace-text-muted);
-      max-width: 400px;
-    }
-
-    .trace-empty__hint {
-      font-size: 0.875rem;
-      color: var(--trace-text-muted);
-      opacity: 0.7;
-      margin-top: 0.5rem;
     }
 
     /* ========== Turn Card ========== */
@@ -446,972 +313,537 @@ const styles = html`
       background: var(--trace-card-bg);
       border: 1px solid var(--trace-card-border);
       border-radius: var(--trace-radius);
-      box-shadow: var(--trace-shadow);
       margin-bottom: 1.5rem;
-      /* Removed overflow:hidden to allow tooltips to escape */
-      animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      animation-fill-mode: both;
-      transition: var(--trace-transition);
-      position: relative;
+      box-shadow: var(--trace-shadow);
+      overflow: hidden;
+      animation: slideUp 0.3s ease-out;
     }
 
-    .turn-card:hover {
-      box-shadow: var(--trace-shadow-lg);
-      transform: translateY(-2px);
-    }
-
-    .turn-card--pending {
-      border-left: 4px solid var(--trace-warning);
-    }
-
-    .turn-card--complete {
-      border-left: 4px solid var(--trace-success);
-    }
-
-    .turn-card--error {
-      border-left: 4px solid var(--trace-error);
-    }
-
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
-    }
-
-    /* ========== Turn Header ========== */
     .turn-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
       padding: 1rem 1.5rem;
-      background: linear-gradient(
-        135deg,
-        var(--trace-accent-light) 0%,
-        transparent 100%
-      );
       border-bottom: 1px solid var(--trace-card-border);
-      position: relative;
-      z-index: 1;
-    }
-
-    .turn-card--system .turn-header {
-      background: linear-gradient(
-        135deg,
-        rgba(139, 92, 246, 0.15) 0%,
-        transparent 100%
-      );
-    }
-
-    .turn-header__left {
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 1rem;
-    }
-
-    .turn-source {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .turn-source__icon {
-      width: 24px;
-      height: 24px;
-      color: var(--trace-accent);
-    }
-
-    .turn-source__icon--system {
-      color: #8b5cf6;
-    }
-
-    .turn-source__label {
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--trace-text);
-    }
-
-    .turn-card--system .turn-source__label {
-      color: #8b5cf6;
+      background: linear-gradient(to right, var(--trace-accent-bg), transparent);
     }
 
     .turn-meta {
       display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.813rem;
+      gap: 1rem;
+      font-size: 0.875rem;
       color: var(--trace-text-muted);
     }
 
-    .turn-meta__model {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.25rem 0.625rem;
+    .turn-badge {
       background: var(--trace-card-bg);
-      border-radius: 9999px;
-      font-weight: 500;
+      border: 1px solid var(--trace-card-border);
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--trace-text);
     }
 
-    .turn-meta__duration {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.25rem 0.625rem;
-      background: var(--trace-success);
-      color: white;
-      border-radius: 9999px;
-      font-weight: 500;
-    }
-
-    .turn-meta__duration--pending {
-      background: var(--trace-warning);
-    }
-
-    .turn-meta__duration--error {
-      background: var(--trace-error);
-    }
-
-    .turn-header__right {
+    .phase-row {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-    }
-
-    .turn-id {
-      font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
-      font-size: 0.75rem;
-      color: var(--trace-accent);
-      background: var(--trace-accent-light);
-      padding: 0.375rem 0.75rem;
-      border-radius: var(--trace-radius-sm);
-    }
-
-    .turn-timestamp {
-      font-size: 0.75rem;
-      color: var(--trace-text-muted);
-    }
-
-    /* ========== Step Flow ========== */
-    .step-flow-wrapper {
       padding: 1.5rem;
       overflow-x: auto;
-      overflow-y: visible;
-      scroll-behavior: smooth;
-      -webkit-overflow-scrolling: touch;
-      position: relative;
-      z-index: 10;
+      gap: 1rem;
     }
 
-    /* Custom scrollbar */
-    .step-flow-wrapper::-webkit-scrollbar {
-      height: 8px;
-    }
-
-    .step-flow-wrapper::-webkit-scrollbar-track {
-      background: var(--trace-bg);
-      border-radius: 4px;
-    }
-
-    .step-flow-wrapper::-webkit-scrollbar-thumb {
-      background: var(--trace-text-muted);
-      border-radius: 4px;
-    }
-
-    .step-flow-wrapper::-webkit-scrollbar-thumb:hover {
-      background: var(--trace-accent);
-    }
-
-    .step-flow {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      min-width: max-content;
-    }
-
-    /* ========== Flow Arrow ========== */
-    .flow-arrow {
-      width: 24px;
-      height: 24px;
-      color: var(--trace-text-muted);
-      flex-shrink: 0;
-      opacity: 0.5;
-    }
-
-    /* ========== Step Icon ========== */
-    .step-icon {
-      position: relative;
+    .phase-item {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.75rem;
-      background: var(--trace-bg);
-      border: 2px solid var(--trace-card-border);
-      border-radius: var(--trace-radius);
       cursor: pointer;
-      transition: var(--trace-transition);
-      min-width: 72px;
-      flex-shrink: 0;
+      position: relative;
+      min-width: 80px;
+      padding: 0.75rem;
+      border-radius: var(--trace-radius);
+      border: 1px solid transparent;
+      transition: all 0.2s;
     }
 
-    .step-icon:hover {
-      background: var(--trace-accent-light);
+    .phase-item:hover {
+      background: var(--trace-accent-bg);
       border-color: var(--trace-accent);
-      transform: translateY(-4px) scale(1.05);
-      box-shadow: var(--trace-shadow-lg);
+      transform: translateY(-2px);
     }
 
-    .step-icon:active {
-      transform: translateY(-2px) scale(1.02);
-    }
-
-    .step-icon__svg {
+    .phase-icon {
       width: 32px;
       height: 32px;
       color: var(--trace-accent);
-      transition: var(--trace-transition);
     }
 
-    .step-icon:hover .step-icon__svg {
-      color: var(--trace-accent-dark);
-      transform: scale(1.1);
-    }
-
-    .step-icon__label {
+    .phase-label {
       font-size: 0.75rem;
       font-weight: 500;
       color: var(--trace-text-muted);
       text-align: center;
       white-space: nowrap;
     }
-
-    .step-icon:hover .step-icon__label {
-      color: var(--trace-accent-dark);
-    }
-
-    /* ========== Badge ========== */
-    .step-badge {
-      position: absolute;
-      top: -6px;
-      right: -6px;
-      min-width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--trace-error);
-      color: white;
-      font-size: 0.688rem;
-      font-weight: 700;
-      border-radius: 9999px;
-      padding: 0 6px;
-      animation: popIn 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    }
-
-    @keyframes popIn {
-      from {
-        transform: scale(0);
-        opacity: 0;
-      }
-      to {
-        transform: scale(1);
-        opacity: 1;
-      }
-    }
-
-    /* ========== Tooltip ========== */
-    .step-icon::before {
-      content: attr(data-tooltip);
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%) translateY(-8px);
-      padding: 0.5rem 0.75rem;
-      background: #1e293b;
-      color: white;
-      font-size: 0.75rem;
-      font-weight: 500;
-      white-space: nowrap;
-      border-radius: var(--trace-radius-sm);
-      opacity: 0;
-      visibility: hidden;
-      transition: var(--trace-transition);
-      z-index: 9999;
-      pointer-events: none;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-
-    .step-icon::after {
-      content: "";
-      position: absolute;
-      bottom: 100%;
-      left: 50%;
-      transform: translateX(-50%) translateY(4px);
-      border: 6px solid transparent;
-      border-top-color: #1e293b;
-      opacity: 0;
-      visibility: hidden;
-      transition: var(--trace-transition);
-      z-index: 9999;
-    }
-
-    .step-icon:hover::before,
-    .step-icon:hover::after {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .step-icon:hover::before {
-      transform: translateX(-50%) translateY(-12px);
-    }
-
-    .step-icon:hover::after {
-      transform: translateX(-50%) translateY(0);
+    
+    .phase-arrow {
+      color: var(--trace-text-muted);
+      opacity: 0.3;
+      width: 20px;
     }
 
     /* ========== Modal ========== */
-    .trace-modal-overlay {
+    .modal-overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85); /* Darker backdrop for better contrast */
+      backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 99999;
-      animation: fadeIn 0.2s ease-out;
+      z-index: 99999; /* Very high z-index */
       padding: 2rem;
-      box-sizing: border-box;
-      isolation: isolate;
     }
 
-    .trace-modal {
-      background: #ffffff;
-      border-radius: var(--trace-radius);
-      box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
-      max-width: 800px;
+    .modal {
+      background: var(--trace-card-bg); /* Uses card bg which is solid */
       width: 100%;
-      max-height: calc(100vh - 4rem);
-      overflow: hidden;
+      max-width: 900px;
+      height: 85vh;
+      border-radius: var(--trace-radius);
       display: flex;
       flex-direction: column;
-      animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--trace-card-border);
+      animation: scaleIn 0.2s ease-out;
       position: relative;
       z-index: 100000;
     }
 
-    @media (prefers-color-scheme: dark) {
-      .trace-modal {
-        background: #1e293b;
-      }
-    }
-
-    @keyframes modalSlideIn {
-      from {
-        opacity: 0;
-        transform: scale(0.95) translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-      }
-    }
-
-    .trace-modal__header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1.25rem 1.5rem;
+    .modal-header {
+      padding: 1.5rem;
       border-bottom: 1px solid var(--trace-card-border);
-      background: linear-gradient(
-        135deg,
-        var(--trace-accent-light) 0%,
-        transparent 100%
-      );
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--trace-card-bg);
+      border-radius: var(--trace-radius) var(--trace-radius) 0 0;
     }
 
-    .trace-modal__title {
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 600;
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      font-size: 1.125rem;
-      font-weight: 600;
-      color: var(--trace-text);
+      color: var(--text-strong);
     }
 
-    .trace-modal__title svg {
-      width: 24px;
-      height: 24px;
-      color: var(--trace-accent);
-    }
-
-    .trace-modal__close {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      height: 36px;
-      background: transparent;
-      border: none;
-      border-radius: 8px;
-      color: var(--trace-text-muted);
-      cursor: pointer;
-      transition: var(--trace-transition);
-    }
-
-    .trace-modal__close:hover {
-      background: var(--trace-error);
-      color: white;
-    }
-
-    .trace-modal__close svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .trace-modal__body {
+    .modal-body {
       flex: 1;
       overflow-y: auto;
+      padding: 0;
+      background: var(--trace-card-bg); /* Ensure solid background */
+    }
+
+    .modal-content-scroll {
       padding: 1.5rem;
     }
 
-    .trace-modal__section {
-      margin-bottom: 1.5rem;
-    }
-
-    .trace-modal__section:last-child {
-      margin-bottom: 0;
-    }
-
-    .trace-modal__section-title {
-      font-size: 0.875rem;
-      font-weight: 600;
+    .modal-close {
+      background: transparent;
+      border: none;
       color: var(--trace-text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.75rem;
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 0.5rem;
+    }
+    .modal-close:hover {
+      background: var(--bg-hover);
+      color: var(--trace-text);
     }
 
-    .trace-code-block {
-      background: var(--trace-bg);
+    /* ========== Accordion ========== */
+    details.accordion {
+      margin-bottom: 1rem;
       border: 1px solid var(--trace-card-border);
       border-radius: var(--trace-radius-sm);
+      overflow: hidden;
+      background: var(--trace-bg); /* Slightly distinct from card bg */
+    }
+    
+    details.accordion summary {
+      padding: 1rem;
+      background: var(--bg-elevated); /* Explicit elevated bg */
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--text-strong); /* Strong text for headers */
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      list-style: none;
+    }
+    
+    details.accordion summary::-webkit-details-marker {
+      display: none;
+    }
+    
+    details.accordion summary::after {
+      content: '+';
+      font-size: 1.25rem;
+      color: var(--trace-text-muted);
+    }
+    
+    details.accordion[open] summary::after {
+      content: '−';
+    }
+
+    details.accordion[open] summary {
+      border-bottom: 1px solid var(--trace-card-border);
+    }
+
+    .accordion-content {
       padding: 1rem;
       overflow-x: auto;
-      font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
-      font-size: 0.813rem;
-      line-height: 1.6;
-      color: var(--trace-text);
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .trace-code-block--response {
-      background: linear-gradient(
-        135deg,
-        var(--trace-accent-light) 0%,
-        var(--trace-bg) 100%
-      );
-      border-color: var(--trace-accent);
-      font-family: inherit;
-      font-size: 0.938rem;
-      line-height: 1.7;
-    }
-
-    /* ========== Response Metadata ========== */
-    .trace-response-meta {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 1rem;
-    }
-
-    .trace-response-meta__item {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      padding: 1rem;
       background: var(--trace-bg);
-      border: 1px solid var(--trace-card-border);
-      border-radius: var(--trace-radius-sm);
     }
 
-    .trace-response-meta__item--error {
-      border-color: var(--trace-error);
-      background: rgba(239, 68, 68, 0.1);
-    }
-
-    .trace-response-meta__label {
-      font-size: 0.75rem;
-      font-weight: 500;
-      color: var(--trace-text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .trace-response-meta__value {
-      font-size: 1.125rem;
-      font-weight: 600;
+    /* ========== JSON Viewer ========== */
+    .json-key { color: var(--trace-accent); }
+    .json-string { color: var(--ok); }
+    .json-number { color: var(--warn); }
+    .json-boolean { color: #db2777; }
+    .json-null { color: var(--trace-text-muted); }
+    
+    .json-block {
+      font-family: var(--trace-mono);
+      font-size: 0.813rem;
+      line-height: 1.5;
       color: var(--trace-text);
     }
-
-    .trace-response-meta__value--complete {
-      color: var(--trace-success);
+    
+    .json-object, .json-array {
+      margin-left: 1.5rem;
     }
-
-    .trace-response-meta__value--pending {
-      color: var(--trace-warning);
-    }
-
-    .trace-response-meta__value--error {
-      color: var(--trace-error);
-    }
-
-    .trace-response-note {
-      margin-top: 1rem;
-      padding: 0.75rem 1rem;
-      background: var(--trace-accent-light);
-      border-radius: var(--trace-radius-sm);
-      font-size: 0.813rem;
+    
+    .json-collapser {
+      cursor: pointer;
+      user-select: none;
       color: var(--trace-text-muted);
-      font-style: italic;
+      margin-right: 0.25rem;
+      display: inline-block;
+      width: 10px;
     }
 
-    /* ========== Responsive ========== */
-    @media (max-width: 768px) {
-      .llm-trace-container {
-        padding: 1rem;
-      }
+    /* ========== Helper Classes ========== */
+    .bg-user { background-color: var(--bg-hover); }
+    .text-mono { font-family: var(--trace-mono); white-space: pre-wrap; color: var(--trace-text); }
+    .p-4 { padding: 1rem; }
+    .rounded { border-radius: var(--trace-radius-sm); }
+    .border { border: 1px solid var(--trace-card-border); }
 
-      .trace-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
-      }
-
-      .trace-title h1 {
-        font-size: 1.25rem;
-      }
-
-      .turn-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.75rem;
-        padding: 1rem;
-      }
-
-      .turn-header__right {
-        width: 100%;
-        justify-content: space-between;
-      }
-
-      .step-flow-wrapper {
-        padding: 1rem;
-      }
-
-      .step-icon {
-        min-width: 60px;
-        padding: 0.5rem;
-      }
-
-      .step-icon__svg {
-        width: 24px;
-        height: 24px;
-      }
-
-      .step-icon__label {
-        font-size: 0.688rem;
-      }
+    /* ========== Animations ========== */
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes scaleIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
     }
   </style>
 `;
 
 // ============================================================================
-// Render Functions
+// Render Helpers
 // ============================================================================
 
-function renderStepIcon(step: TurnStep, onStepClick: (step: TurnStep) => void) {
+function renderJson(data: unknown, level = 0): TemplateResult {
+  if (data === null) return html`<span class="json-null">null</span>`;
+  if (data === undefined) return html`<span class="json-null">undefined</span>`;
+  
+  if (typeof data === 'string') return html`<span class="json-string">"${data}"</span>`;
+  if (typeof data === 'number') return html`<span class="json-number">${data}</span>`;
+  if (typeof data === 'boolean') return html`<span class="json-boolean">${data}</span>`;
+  
+  if (Array.isArray(data)) {
+    if (data.length === 0) return html`[]`;
+    return html`
+      <div>
+        <span>[</span>
+        <div class="json-array">
+          ${data.map((item, i) => html`
+            <div>
+              ${renderJson(item, level + 1)}${i < data.length - 1 ? ',' : ''}
+            </div>
+          `)}
+        </div>
+        <span>]</span>
+      </div>
+    `;
+  }
+  
+  if (typeof data === 'object') {
+    const keys = Object.keys(data as object);
+    if (keys.length === 0) return html`{}`;
+    return html`
+      <div>
+        <span>{</span>
+        <div class="json-object">
+          ${keys.map((key, i) => html`
+            <div>
+              <span class="json-key">"${key}"</span>: 
+              ${renderJson((data as any)[key], level + 1)}${i < keys.length - 1 ? ',' : ''}
+            </div>
+          `)}
+        </div>
+        <span>}</span>
+      </div>
+    `;
+  }
+  
+  return html`<span>${String(data)}</span>`;
+}
+
+function renderPhaseIcon(phase: TurnPhase, index: number, total: number, onClick: () => void) {
+  if (!phase.visible) return nothing;
+  
   return html`
-    <div
-      class="step-icon"
-      data-tooltip="${step.tooltip}"
-      @click=${() => onStepClick(step)}
-      role="button"
-      tabindex="0"
-      aria-label="${step.label}: ${step.tooltip}"
-      @keydown=${(e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onStepClick(step);
-        }
-      }}
-    >
-      ${step.count
-        ? html`<span class="step-badge">${step.count}</span>`
-        : nothing}
-      <div class="step-icon__svg" .innerHTML=${step.icon}></div>
-      <span class="step-icon__label">${step.label}</span>
+    <div class="phase-item" @click=${onClick} title=${phase.tooltip}>
+      <div class="phase-icon" .innerHTML=${phase.icon}></div>
+      <span class="phase-label">${phase.label}</span>
+    </div>
+    ${index < total - 1 ? html`<div class="phase-arrow" .innerHTML=${ICONS.arrow}></div>` : nothing}
+  `;
+}
+
+function renderContextModalContent(turn: Turn) {
+  const { systemPrompt, historyMessages, lastUserMessage, toolDefinitions } = turn;
+  
+  // Tags/Pills
+  const pills = [
+    { label: "Model", value: `${turn.provider}/${turn.model}` },
+    { label: "Duration", value: `${turn.durationMs}ms` },
+    // Estimated tokens would go here if available
+  ];
+
+  return html`
+    <div class="modal-content-scroll">
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+        ${pills.map(p => html`
+          <span class="turn-badge" style="font-size: 0.75rem; background: var(--trace-bg);">
+            <span style="color: var(--trace-text-muted)">${p.label}:</span> ${p.value}
+          </span>
+        `)}
+      </div>
+
+      <!-- 1. System Prompt -->
+      <details class="accordion" ?open=${true}>
+        <summary>System Prompt</summary>
+        <div class="accordion-content">
+          <div class="text-mono p-4 bg-user rounded border">${systemPrompt || "No system prompt"}</div>
+        </div>
+      </details>
+
+      <!-- 2. Conversation History -->
+      <details class="accordion">
+        <summary>Conversation History (${historyMessages.length} messages)</summary>
+        <div class="accordion-content">
+          ${historyMessages.length === 0 ? html`<div class="p-4 text-mono" style="color: var(--trace-text-muted)">No history</div>` : html`
+            <div class="json-block">
+              ${renderJson(historyMessages)}
+            </div>
+          `}
+        </div>
+      </details>
+
+      <!-- 3. Current User Message -->
+      <details class="accordion" ?open=${true}>
+        <summary>Current User Message</summary>
+        <div class="accordion-content">
+          <div class="p-4 bg-user rounded border">
+            ${lastUserMessage ? extractTextContent(lastUserMessage) : "No user message found"}
+          </div>
+          <div style="margin-top: 1rem">
+            <h4 style="font-size: 0.75rem; color: var(--trace-text-muted); text-transform: uppercase;">Raw JSON</h4>
+            <div class="json-block border rounded p-4">
+              ${renderJson(lastUserMessage)}
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 4. Tool Definitions -->
+      ${toolDefinitions && toolDefinitions.length > 0 ? html`
+        <details class="accordion">
+          <summary>Tool Definitions (${toolDefinitions.length})</summary>
+          <div class="accordion-content">
+            <div class="json-block">
+              ${renderJson(toolDefinitions)}
+            </div>
+          </div>
+        </details>
+      ` : nothing}
+
+      <!-- 5. Metadata -->
+      <details class="accordion">
+        <summary>Metadata & Tokens</summary>
+        <div class="accordion-content">
+          <div class="json-block">
+            ${renderJson({
+              usage: turn.usage,
+              config: turn.raw.config
+            })}
+          </div>
+        </div>
+      </details>
     </div>
   `;
 }
 
-function renderStepFlow(
-  steps: TurnStep[],
-  onStepClick: (step: TurnStep) => void,
-) {
+function renderGenericModalContent(phase: TurnPhase) {
+  const content = phase.content;
+  const isString = typeof content === "string";
+  
+  if (phase.type === "user") {
+    // Specialized user view if not in context modal
+    return html`
+      <div class="modal-content-scroll">
+         <div class="p-4 bg-user rounded border text-mono" style="font-size: 0.938rem;">
+           ${extractTextContent(content)}
+         </div>
+      </div>
+    `;
+  }
+
   return html`
-    <div class="step-flow-wrapper">
-      <div class="step-flow">
-        ${steps.map(
-          (step, i) => html`
-            ${renderStepIcon(step, onStepClick)}
-            ${i < steps.length - 1
-              ? html`<div .innerHTML=${ARROW_ICON}></div>`
-              : nothing}
-          `,
-        )}
+    <div class="modal-content-scroll">
+      ${isString ? html`
+        <div class="text-mono p-4 border rounded" style="background: var(--trace-bg)">${content}</div>
+      ` : html`
+        <div class="json-block p-4 border rounded" style="background: var(--trace-bg)">
+          ${renderJson(content)}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function renderModal(turn: Turn, phase: TurnPhase, onClose: () => void) {
+  return html`
+    <div class="modal-overlay" @click=${(e: Event) => {
+      if ((e.target as HTMLElement).classList.contains("modal-overlay")) onClose();
+    }}>
+      <div class="modal">
+        <header class="modal-header">
+          <div class="modal-title">
+            <span style="color: var(--trace-accent); display: flex;">
+              <div style="width: 24px; height: 24px;" .innerHTML=${phase.icon}></div>
+            </span>
+            ${phase.type === "context" ? `Context sent to model – ${turn.turnId}` : phase.label}
+          </div>
+          <button class="modal-close" @click=${onClose}>
+            <div style="width: 24px; height: 24px;" .innerHTML=${ICONS.close}></div>
+          </button>
+        </header>
+        <div class="modal-body">
+          ${phase.type === "context" 
+            ? renderContextModalContent(turn) 
+            : renderGenericModalContent(phase)}
+        </div>
       </div>
     </div>
   `;
 }
 
-function renderTurnCard(
-  turn: Turn,
-  index: number,
-  onStepClick: (step: TurnStep, turn: Turn) => void,
-) {
-  const durationClass =
-    turn.status === "pending"
-      ? "turn-meta__duration--pending"
-      : turn.status === "error"
-        ? "turn-meta__duration--error"
-        : "";
-
-  // Source icon based on user vs consciousness
-  const sourceIcon = turn.isSystemInitiated
-    ? STEP_ICONS.consciousness
-    : STEP_ICONS.user;
+function renderTurn(turn: Turn, index: number, onPhaseClick: (phase: TurnPhase, turn: Turn) => void) {
+  const visiblePhases = turn.phases.filter(p => p.visible);
 
   return html`
-    <article
-      class="turn-card turn-card--${turn.status} ${turn.isSystemInitiated
-        ? "turn-card--system"
-        : "turn-card--user"}"
-      style="animation-delay: ${index * 0.1}s"
-    >
-      <header class="turn-header">
-        <div class="turn-header__left">
-          <div class="turn-source">
-            <span
-              class="turn-source__icon ${turn.isSystemInitiated
-                ? "turn-source__icon--system"
-                : ""}"
-              .innerHTML=${sourceIcon}
-            ></span>
-            <span class="turn-source__label">${turn.sourceLabel}</span>
+    <article class="turn-card">
+      <div class="turn-header">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <div class="turn-badge" style="background: ${turn.isSystemInitiated ? '#f3e8ff' : '#eff6ff'}; color: ${turn.isSystemInitiated ? '#7e22ce' : '#1d4ed8'}">
+            ${turn.sourceLabel}
           </div>
-          <div class="turn-meta">
-            <span class="turn-meta__model">
-              ${turn.provider}/${turn.model}
-            </span>
-            <span class="turn-meta__duration ${durationClass}">
-              ${turn.status === "pending"
-                ? "Processing..."
-                : turn.status === "error"
-                  ? "Error"
-                  : `${turn.durationMs}ms`}
-            </span>
-          </div>
+          <span class="turn-badge">${turn.turnId}</span>
+          <span style="color: var(--trace-text-muted); font-size: 0.875rem;">${turn.timestamp}</span>
         </div>
-        <div class="turn-header__right">
-          <span class="turn-id">${turn.turnId}</span>
-          <span class="turn-timestamp">${turn.timestamp}</span>
+        <div class="turn-meta">
+          <span>${turn.provider}/${turn.model}</span>
+          <span style="color: ${turn.status === 'error' ? 'var(--trace-error)' : 'var(--trace-success)'}">
+            ${turn.status === 'pending' ? 'Processing...' : `${turn.durationMs}ms`}
+          </span>
         </div>
-      </header>
-      ${renderStepFlow(turn.steps, (step) => onStepClick(step, turn))}
+      </div>
+      <div class="phase-row">
+        ${visiblePhases.map((phase, i) => renderPhaseIcon(phase, i, visiblePhases.length, () => onPhaseClick(phase, turn)))}
+      </div>
     </article>
   `;
 }
 
-function renderModal(
-  step: TurnStep | null,
-  turn: Turn | null,
-  onClose: () => void,
-) {
-  if (!step || !turn) return nothing;
-
-  const closeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
-
-  // For response step, show metadata (actual content not captured in current data structure)
-  const isResponseStep = step.type === "response";
-  const detailsObj = step.details as any;
-
-  return html`
-    <div
-      class="trace-modal-overlay"
-      @click=${(e: Event) => {
-        if (
-          (e.target as HTMLElement).classList.contains("trace-modal-overlay")
-        ) {
-          onClose();
-        }
-      }}
-      @keydown=${(e: KeyboardEvent) => {
-        if (e.key === "Escape") onClose();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-    >
-      <div class="trace-modal">
-        <header class="trace-modal__header">
-          <h2 id="modal-title" class="trace-modal__title">
-            <span .innerHTML=${step.icon}></span>
-            ${step.label} Details
-          </h2>
-          <button
-            class="trace-modal__close"
-            @click=${onClose}
-            aria-label="Close modal"
-          >
-            <span .innerHTML=${closeIcon}></span>
-          </button>
-        </header>
-        <div class="trace-modal__body">
-          ${isResponseStep
-            ? html`
-                ${detailsObj.responseText
-                  ? html`
-                      <section class="trace-modal__section">
-                        <h3 class="trace-modal__section-title">
-                          Response Content
-                        </h3>
-                        <pre
-                          class="trace-code-block trace-code-block--response"
-                        >
-${detailsObj.responseText}</pre
-                        >
-                      </section>
-                    `
-                  : nothing}
-                <section class="trace-modal__section">
-                  <h3 class="trace-modal__section-title">Response Metadata</h3>
-                  <div class="trace-response-meta">
-                    <div class="trace-response-meta__item">
-                      <span class="trace-response-meta__label">Status</span>
-                      <span
-                        class="trace-response-meta__value trace-response-meta__value--${detailsObj.status}"
-                        >${detailsObj.status}</span
-                      >
-                    </div>
-                    <div class="trace-response-meta__item">
-                      <span class="trace-response-meta__label">Duration</span>
-                      <span class="trace-response-meta__value"
-                        >${detailsObj.durationMs}ms</span
-                      >
-                    </div>
-                    <div class="trace-response-meta__item">
-                      <span class="trace-response-meta__label">Chunks</span>
-                      <span class="trace-response-meta__value"
-                        >${detailsObj.chunksCount || 0}</span
-                      >
-                    </div>
-                    ${detailsObj.error
-                      ? html`
-                          <div
-                            class="trace-response-meta__item trace-response-meta__item--error"
-                          >
-                            <span class="trace-response-meta__label"
-                              >Error</span
-                            >
-                            <span class="trace-response-meta__value"
-                              >${detailsObj.error}</span
-                            >
-                          </div>
-                        `
-                      : nothing}
-                  </div>
-                </section>
-              `
-            : html`
-                <section class="trace-modal__section">
-                  <h3 class="trace-modal__section-title">Content</h3>
-                  <pre class="trace-code-block">
-${typeof step.details === "string"
-                      ? step.details
-                      : JSON.stringify(step.details, null, 2)}</pre
-                  >
-                </section>
-              `}
-          ${step.type === "response" && turn.raw.responseUsage
-            ? html`
-                <section class="trace-modal__section">
-                  <h3 class="trace-modal__section-title">Token Usage</h3>
-                  <pre class="trace-code-block">
-${JSON.stringify(turn.raw.responseUsage, null, 2)}</pre
-                  >
-                </section>
-              `
-            : nothing}
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderEmptyState() {
-  const emptyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h.01M15 12h.01M12 12h.01M21 12c0 4.97-4.03 9-9 9a9 9 0 0 1-2.63-.39l-4.37 1.44V17.7A9 9 0 1 1 21 12z"/></svg>`;
-
-  return html`
-    <div class="trace-empty">
-      <div class="trace-empty__icon" .innerHTML=${emptyIcon}></div>
-      <p class="trace-empty__text">No LLM interactions recorded yet.</p>
-      <p class="trace-empty__hint">
-        Start a conversation to see the diagnostic trace.
-      </p>
-    </div>
-  `;
-}
-
 // ============================================================================
-// Props Type
+// Main Component
 // ============================================================================
 
 export type LlmDebugProps = {
   history: LlmInteraction[];
-  modalStep: unknown | null;
+  modalStep: unknown | null; // using modalStep to store the active Phase
   modalTurnId: string | null;
   onClear: () => void;
-  onOpenModal: (step: TurnStep, turnId: string) => void;
+  onOpenModal: (step: any, turnId: string) => void;
   onCloseModal: () => void;
 };
 
-// ============================================================================
-// Main Render Export
-// ============================================================================
-
 export function renderLlmDebug(props: LlmDebugProps) {
-  // Transform interactions to turns
-  const turns = props.history.map((interaction, i) =>
-    interactionToTurn(interaction, props.history.length - 1 - i),
+  const turns = props.history.map((interaction, i) => 
+    interactionToTurn(interaction, props.history.length - 1 - i)
   );
 
-  // Find the selected turn and step for the modal
-  let selectedStep: TurnStep | null = null;
   let selectedTurn: Turn | null = null;
+  let selectedPhase: TurnPhase | null = null;
 
-  if (props.modalStep && props.modalTurnId) {
-    selectedTurn = turns.find((t) => t.id === props.modalTurnId) || null;
-    selectedStep = props.modalStep as TurnStep;
+  if (props.modalTurnId && props.modalStep) {
+    selectedTurn = turns.find(t => t.id === props.modalTurnId) || null;
+    selectedPhase = props.modalStep as TurnPhase;
   }
 
-  // Stats
-  const totalTurns = turns.length;
-  const completedTurns = turns.filter((t) => t.status === "complete").length;
-  const pendingTurns = turns.filter((t) => t.status === "pending").length;
-  const errorTurns = turns.filter((t) => t.status === "error").length;
-
-  const clearIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
-  const traceIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 5h20M2 19h20"/></svg>`;
-
-  // Step click handler - uses props callback to update parent state
-  const handleStepClick = (step: TurnStep, turn: Turn) => {
-    props.onOpenModal(step, turn.id);
+  const handlePhaseClick = (phase: TurnPhase, turn: Turn) => {
+    props.onOpenModal(phase, turn.id);
   };
 
   return html`
     ${styles}
-    <div class="llm-trace-container">
-      <div class="llm-trace-inner">
-        <!-- Header -->
-        <header class="trace-header">
-          <div class="trace-title">
-            <div class="trace-title-icon" .innerHTML=${traceIcon}></div>
-            <h1>Conversation Turn Diagnostic</h1>
-          </div>
-          <div class="trace-actions">
-            <button class="trace-btn" @click=${props.onClear}>
-              <span .innerHTML=${clearIcon}></span>
-              Clear History
-            </button>
-          </div>
-        </header>
-
-        <!-- Stats -->
-        ${totalTurns > 0
-          ? html`
-              <div class="trace-stats">
-                <div class="trace-stat">
-                  <span class="trace-stat__value">${totalTurns}</span>
-                  <span class="trace-stat__label">Total Turns</span>
-                </div>
-                <div class="trace-stat">
-                  <span
-                    class="trace-stat__value"
-                    style="color: var(--trace-success)"
-                    >${completedTurns}</span
-                  >
-                  <span class="trace-stat__label">Completed</span>
-                </div>
-                ${pendingTurns > 0
-                  ? html`
-                      <div class="trace-stat">
-                        <span
-                          class="trace-stat__value"
-                          style="color: var(--trace-warning)"
-                          >${pendingTurns}</span
-                        >
-                        <span class="trace-stat__label">Pending</span>
-                      </div>
-                    `
-                  : nothing}
-                ${errorTurns > 0
-                  ? html`
-                      <div class="trace-stat">
-                        <span
-                          class="trace-stat__value"
-                          style="color: var(--trace-error)"
-                          >${errorTurns}</span
-                        >
-                        <span class="trace-stat__label">Errors</span>
-                      </div>
-                    `
-                  : nothing}
-              </div>
-            `
-          : nothing}
-
-        <!-- Turn List -->
-        <section aria-label="Conversation turns">
-          ${totalTurns === 0
-            ? renderEmptyState()
-            : turns.map((turn, i) => renderTurnCard(turn, i, handleStepClick))}
-        </section>
+    <div class="llm-trace-view">
+      <div class="header">
+        <div class="title">
+          <h1>LLM Conversation Turn Diagnostic</h1>
+          <div class="subtitle">Variant A Edition</div>
+        </div>
+        <div class="controls">
+          <button @click=${props.onClear}>
+            <span style="width: 16px; height: 16px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </span>
+            Clear History
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- Modal (rendered outside main container for z-index) -->
-    ${selectedStep && selectedTurn
-      ? renderModal(selectedStep, selectedTurn, props.onCloseModal)
-      : nothing}
+      ${turns.length === 0 ? html`
+        <div style="text-align: center; padding: 4rem; color: var(--trace-text-muted); border: 2px dashed var(--trace-card-border); border-radius: var(--trace-radius);">
+          No interactions recorded.
+        </div>
+      ` : html`
+        <div>
+          ${turns.map((turn, i) => renderTurn(turn, i, handlePhaseClick))}
+        </div>
+      `}
+      ${selectedTurn && selectedPhase ? renderModal(selectedTurn, selectedPhase, props.onCloseModal) : nothing}
+    </div>
   `;
 }
