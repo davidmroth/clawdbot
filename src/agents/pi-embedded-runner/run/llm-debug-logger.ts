@@ -1,5 +1,6 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
 import { emitAgentEvent } from "../../../infra/agent-events.js";
+import { normalizeChunk } from "../../../gateway/stream-normalizer.js";
 
 type LlmDebugLogger = {
   wrapStreamFn: (streamFn: StreamFn) => StreamFn;
@@ -44,7 +45,6 @@ export function createLlmDebugLogger(params: {
           const originalIterator = stream[Symbol.asyncIterator].bind(stream);
 
           // We patch the iterator to intercept chunks
-          // Using 'any' for stream to bypass missing type definition of AssistantMessageEventStream
           (stream as any)[Symbol.asyncIterator] = async function* () {
             const chunks: unknown[] = [];
             let error: unknown = null;
@@ -59,46 +59,25 @@ export function createLlmDebugLogger(params: {
               for await (const chunk of iterable) {
                 chunks.push(chunk);
 
-                // Extract text content from chunk
-                if (chunk && typeof chunk === "object") {
-                  // Handle different chunk formats
-                  const c = chunk as any;
-
-                  // Format: { type: "text", text: "..." }
-                  if (c.type === "text" && typeof c.text === "string") {
-                    responseText += c.text;
+                // Use the shared normalizer
+                const normalized = normalizeChunk(chunk);
+                if (normalized?.type === "text") {
+                  // isCumulative means the chunk contains full text so far (replace, don't append)
+                  if (normalized.isCumulative) {
+                    responseText = normalized.text;
+                  } else {
+                    responseText += normalized.text;
                   }
-                  // Format: { delta: { text: "..." } } or { delta: { content: "..." } }
-                  else if (c.delta) {
-                    if (typeof c.delta.text === "string") {
-                      responseText += c.delta.text;
-                    } else if (typeof c.delta.content === "string") {
-                      responseText += c.delta.content;
-                    }
+                  if (normalized.usage) {
+                    usage = normalized.usage;
                   }
-                  // Format: { content: [{ type: "text", text: "..." }] }
-                  else if (Array.isArray(c.content)) {
-                    for (const part of c.content) {
-                      if (
-                        part.type === "text" &&
-                        typeof part.text === "string"
-                      ) {
-                        responseText += part.text;
-                      }
-                    }
-                  }
-                  // Format: { text: "..." } (simple text chunk)
-                  else if (
-                    typeof c.text === "string" &&
-                    c.type !== "tool_use"
-                  ) {
-                    responseText += c.text;
-                  }
-
-                  // Extract usage if present
-                  if ("usage" in c && c.usage) {
-                    usage = c.usage;
-                  }
+                } else if (normalized?.type === "tool_call") {
+                  // Optional: track tool calls if needed
+                } else if (normalized && "usage" in (normalized as any)) {
+                   // Fallback for usage-only chunks
+                   if ((normalized as any).usage) {
+                     usage = (normalized as any).usage;
+                   }
                 }
 
                 yield chunk;
@@ -107,6 +86,19 @@ export function createLlmDebugLogger(params: {
               error = err;
               throw err;
             } finally {
+              // Fallback: If responseText is empty but we have chunks, try to dump the first chunk to help debug
+              if (!responseText && chunks.length > 0) {
+                try {
+                  const sample =
+                    typeof chunks[0] === "string"
+                      ? chunks[0]
+                      : JSON.stringify(chunks[0]);
+                  responseText = `[DEBUG: Could not parse response text. Raw chunk sample: ${sample}]`;
+                } catch (e) {
+                  responseText = `[DEBUG: Could not parse response text. Chunks: ${chunks.length}]`;
+                }
+              }
+
               // 3. Emit Response Event on stream completion/error
               emitAgentEvent({
                 runId: params.runId,

@@ -2,7 +2,7 @@
 set -e
 
 # Target URL
-RESTART_URL="${BUILD_SERVICE_URL:-http://clawdbot-build:3000/restart}"
+RESTART_URL="${BUILD_SERVICE_URL:-http://clawdbot-builder:3000/restart}"
 
 echo "Triggering restart at $RESTART_URL..."
 curl -X POST "$RESTART_URL"

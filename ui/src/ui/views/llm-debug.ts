@@ -122,25 +122,37 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   // Phases construction (Variant A)
   const phases: TurnPhase[] = [];
 
-  // 1. User Message
+  // 1. User Message (or System initiated)
   phases.push({
     type: "user",
     icon: ICONS.user,
-    label: "User message",
-    tooltip: "User message",
+    label: sourceLabel === "System" ? "System event" : "User message",
+    tooltip: sourceLabel === "System" ? "System event" : "User message",
     content: lastUserMessage,
     visible: true,
   });
 
   // 2. Context (Full Prompt)
+  // If explicit system prompt is missing, try to find it in history
+  let effectiveSystemPrompt = systemPrompt;
+  let effectiveHistory = [...historyMessages];
+  
+  if (!effectiveSystemPrompt) {
+    const systemMsgIndex = historyMessages.findIndex((m: any) => m.role === "system");
+    if (systemMsgIndex !== -1) {
+      effectiveSystemPrompt = extractTextContent(historyMessages[systemMsgIndex]);
+      effectiveHistory.splice(systemMsgIndex, 1);
+    }
+  }
+
   phases.push({
     type: "context",
     icon: ICONS.context,
     label: "Context",
     tooltip: "Full context sent to model",
     content: {
-      systemPrompt,
-      historyMessages,
+      systemPrompt: effectiveSystemPrompt,
+      historyMessages: effectiveHistory,
       lastUserMessage,
       toolDefinitions,
       metadata: {}, // placeholders
