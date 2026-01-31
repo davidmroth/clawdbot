@@ -6,8 +6,8 @@ export const TAB_GROUPS = [
     label: "Control",
     tabs: ["overview", "channels", "instances", "sessions", "cron"],
   },
-  { label: "Agent", tabs: ["skills", "nodes", "consciousness"] },
-  { label: "Settings", tabs: ["config", "debug", "llm", "logs"] },
+  { label: "Agent", tabs: ["skills", "nodes", "consciousness", "llm"] },
+  { label: "Settings", tabs: ["config", "debug", "logs"] },
 ] as const;
 
 export type Tab =
@@ -162,7 +162,7 @@ export function titleForTab(tab: Tab) {
     case "debug":
       return "Debug";
     case "llm":
-      return "LLM Trace";
+      return "Trace";
     case "logs":
       return "Logs";
     default:
