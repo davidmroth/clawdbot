@@ -142,6 +142,64 @@ function extractTextContent(msg: any): string {
   return "";
 }
 
+function stringifyToolArgs(args: unknown): string | undefined {
+  if (args === undefined || args === null) return undefined;
+  if (typeof args === "string") return args;
+  try {
+    return JSON.stringify(args);
+  } catch {
+    return String(args);
+  }
+}
+
+function extractToolCallsFromMessages(messages: any[]): Array<{
+  toolName?: string;
+  toolArgs?: string;
+  toolCallId?: string;
+}> {
+  const toolCalls: Array<{ toolName?: string; toolArgs?: string; toolCallId?: string }> = [];
+
+  for (const message of messages) {
+    const content = Array.isArray(message?.content) ? message.content : [];
+    for (const item of content) {
+      const itemType = item?.type;
+      if (itemType === "toolCall" || itemType === "tool_call") {
+        toolCalls.push({
+          toolName: item?.name,
+          toolArgs: stringifyToolArgs(item?.arguments),
+          toolCallId: item?.id ?? item?.toolCallId,
+        });
+      }
+    }
+  }
+
+  return toolCalls;
+}
+
+function dedupeToolCalls(toolCalls: Array<{
+  toolName?: string;
+  toolArgs?: string;
+  toolCallId?: string;
+}>): Array<{
+  toolName?: string;
+  toolArgs?: string;
+  toolCallId?: string;
+}> {
+  const seen = new Set<string>();
+  const deduped: Array<{ toolName?: string; toolArgs?: string; toolCallId?: string }> = [];
+
+  for (const call of toolCalls) {
+    const key = call.toolCallId
+      ? `id:${call.toolCallId}`
+      : `sig:${call.toolName ?? ""}|${call.toolArgs ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(call);
+  }
+
+  return deduped;
+}
+
 function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   const messages = interaction.messages || [];
   
@@ -171,6 +229,13 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   // History is everything except the last user message
   const lastUserMsgIndex = lastUserMessage ? messages.lastIndexOf(lastUserMessage) : -1;
   const historyMessages = lastUserMsgIndex > 0 ? messages.slice(0, lastUserMsgIndex) : [];
+  const lastSystemMsgIndex = lastUserMsgIndex === -1
+    ? messages.map((msg: any) => msg?.role).lastIndexOf("system")
+    : -1;
+  const boundaryIndex =
+    lastUserMsgIndex >= 0 ? lastUserMsgIndex : lastSystemMsgIndex;
+  const runScopedMessages =
+    boundaryIndex >= 0 ? messages.slice(boundaryIndex + 1) : [];
   
   const toolDefinitions = interaction.tools || [];
   
@@ -238,22 +303,20 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     visible: !!reasoning,
   });
 
-  // 4. Tools
-  // Note: We need actual tool calls from the response, not just definitions.
-  // If `LlmInteraction` doesn't strictly have tool calls in a separate field, 
-  // we check if we can parse them or if they were passed in a previous format.
-  // For now, we will show this phase if there are tools defined, or if we detect calls.
-  // Ideally, we'd have a `toolCalls` field in `LlmInteraction`. 
-  // If not, we might hide this or showing placeholder.
-  // Given requirements, let's assume we can try to find them in the response or future data.
-  const hasToolCalls = false; // Placeholder until we have data for tool calls in this turn
+  // 4. Tools - now using actual tool calls from aggregated LlmInteraction
+  const toolCalls = dedupeToolCalls([
+    ...(interaction.toolCalls || []),
+    ...extractToolCallsFromMessages(runScopedMessages),
+  ]);
+  const hasToolCalls = toolCalls.length > 0;
   phases.push({
     type: "tools",
     icon: ICONS.tools,
     label: "Tools",
     tooltip: "Tool calls & observations",
-    content: [], 
+    content: toolCalls,
     visible: hasToolCalls,
+    count: toolCalls.length,
   });
 
   // 5. Model Continuation (Raw output)
@@ -496,6 +559,21 @@ const styles = html`
       white-space: nowrap;
     }
     
+    .phase-count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.25rem;
+      height: 1.25rem;
+      margin-left: 0.25rem;
+      padding: 0 0.375rem;
+      font-size: 0.625rem;
+      font-weight: 600;
+      color: white;
+      background: var(--trace-accent);
+      border-radius: 9999px;
+    }
+    
     .phase-arrow {
       color: var(--trace-text-muted);
       opacity: 0.3;
@@ -558,6 +636,65 @@ const styles = html`
 
     .modal-content-scroll {
       padding: 1.5rem;
+    }
+    
+    /* Tool Calls List */
+    .tool-calls-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    
+    .tool-call-item {
+      background: var(--trace-bg);
+      border: 1px solid var(--trace-card-border);
+      border-radius: var(--trace-radius-sm);
+      overflow: hidden;
+    }
+    
+    .tool-call-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: var(--trace-accent-bg);
+      border-bottom: 1px solid var(--trace-card-border);
+    }
+    
+    .tool-call-icon {
+      width: 1rem;
+      height: 1rem;
+      color: var(--trace-accent);
+    }
+    
+    .tool-call-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .tool-call-name {
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--trace-text);
+    }
+    
+    .tool-call-id {
+      font-size: 0.75rem;
+      color: var(--trace-text-muted);
+      font-family: var(--trace-mono);
+      margin-left: auto;
+    }
+    
+    .tool-call-args {
+      padding: 0.75rem 1rem;
+      font-family: var(--trace-mono);
+      font-size: 0.8125rem;
+      overflow-x: auto;
+    }
+    
+    .tool-call-args code {
+      white-space: pre-wrap;
+      word-break: break-all;
     }
 
     .modal-close {
@@ -720,10 +857,15 @@ function renderJson(data: unknown, level = 0): TemplateResult {
 function renderPhaseIcon(phase: TurnPhase, index: number, total: number, onClick: () => void) {
   if (!phase.visible) return nothing;
   
+  // Show count badge for phases with multiple items (e.g., tool calls)
+  const countBadge = phase.count && phase.count > 0 
+    ? html`<span class="phase-count-badge">${phase.count}</span>` 
+    : nothing;
+  
   return html`
     <div class="phase-item" @click=${onClick} title=${phase.tooltip}>
       <div class="phase-icon" .innerHTML=${phase.icon}></div>
-      <span class="phase-label">${phase.label}</span>
+      <span class="phase-label">${phase.label}${countBadge}</span>
     </div>
     ${index < total - 1 ? html`<div class="phase-arrow" .innerHTML=${ICONS.arrow}></div>` : nothing}
   `;
@@ -813,6 +955,38 @@ function renderContextModalContent(turn: Turn) {
   `;
 }
 
+function renderToolCallItem(toolCall: any, index: number) {
+  const toolName = toolCall.toolName || "unknown";
+  const toolArgs = toolCall.toolArgs;
+  let parsedArgs: any = null;
+  
+  // Try to parse JSON args for pretty display
+  if (toolArgs) {
+    try {
+      parsedArgs = JSON.parse(toolArgs);
+    } catch {
+      parsedArgs = toolArgs;
+    }
+  }
+  
+  return html`
+    <div class="tool-call-item">
+      <div class="tool-call-header">
+        <div class="tool-call-icon" .innerHTML=${ICONS.tools}></div>
+        <span class="tool-call-name">${toolName}</span>
+        ${toolCall.toolCallId ? html`<span class="tool-call-id">${toolCall.toolCallId}</span>` : nothing}
+      </div>
+      ${parsedArgs ? html`
+        <div class="tool-call-args">
+          ${typeof parsedArgs === "string" 
+            ? html`<code>${parsedArgs}</code>` 
+            : renderJson(parsedArgs)}
+        </div>
+      ` : nothing}
+    </div>
+  `;
+}
+
 function renderGenericModalContent(phase: TurnPhase) {
   const content = phase.content;
   const isString = typeof content === "string";
@@ -824,6 +998,25 @@ function renderGenericModalContent(phase: TurnPhase) {
          <div class="p-4 bg-user rounded border text-mono" style="font-size: 0.938rem;">
            ${extractTextContent(content)}
          </div>
+      </div>
+    `;
+  }
+  
+  if (phase.type === "tools" && Array.isArray(content)) {
+    // Specialized tools view showing each tool call with icon
+    const toolCalls = content as any[];
+    if (toolCalls.length === 0) {
+      return html`
+        <div class="modal-content-scroll">
+          <div class="p-4 text-mono" style="color: var(--trace-text-muted)">No tool calls</div>
+        </div>
+      `;
+    }
+    return html`
+      <div class="modal-content-scroll">
+        <div class="tool-calls-list">
+          ${toolCalls.map((tc, i) => renderToolCallItem(tc, i))}
+        </div>
       </div>
     `;
   }

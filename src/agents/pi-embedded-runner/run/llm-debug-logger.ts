@@ -53,6 +53,12 @@ export function createLlmDebugLogger(params: {
             let usage: unknown = null;
             let responseText = "";
             let hasToolCalls = false;
+            // Collect tool call details for UI display
+            const toolCalls: Array<{
+              toolName?: string;
+              toolArgs?: string;
+              toolCallId?: string;
+            }> = [];
 
             try {
               const iterator = originalIterator();
@@ -75,8 +81,13 @@ export function createLlmDebugLogger(params: {
                     usage = normalized.usage;
                   }
                 } else if (normalized?.type === "tool_call") {
-                  // Track that we received tool calls (intermediate LLM call, not final response)
+                  // Track tool calls with details for UI display
                   hasToolCalls = true;
+                  toolCalls.push({
+                    toolName: normalized.toolName,
+                    toolArgs: normalized.toolArgs,
+                    toolCallId: normalized.toolCallId,
+                  });
                 } else if (normalized && "usage" in (normalized as any)) {
                    // Fallback for usage-only chunks
                    if ((normalized as any).usage) {
@@ -90,9 +101,10 @@ export function createLlmDebugLogger(params: {
               error = err;
               throw err;
             } finally {
-              // Detect tool-call-only responses (intermediate LLM calls during tool loop)
-              // These are not user-facing responses and should be filtered by the UI
-              const isToolCallOnly = hasToolCalls && !responseText.trim();
+              // Any response with tool calls is an intermediate response in the agent loop.
+              // The final user-facing response never contains tool calls (just text).
+              // Mark these so the UI can filter them out and show only the final trace.
+              const isToolCallOnly = hasToolCalls;
 
               // Fallback: If responseText is empty but we have chunks and it's not a tool call,
               // try to dump the first chunk to help debug
@@ -122,8 +134,10 @@ export function createLlmDebugLogger(params: {
                     responseText.length > 10000
                       ? responseText.slice(0, 10000) + "... [truncated]"
                       : responseText,
-                  // Flag for intermediate tool-call-only responses (no user-facing text)
+                  // Flag for intermediate responses (any response with tool calls)
                   isToolCallOnly,
+                  // Tool call details for UI aggregation
+                  toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
                 },
               });
             }

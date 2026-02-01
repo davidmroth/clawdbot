@@ -1,6 +1,11 @@
 import { stripThinkingTags } from "../format";
 
 const ENVELOPE_PREFIX = /^\[([^\]]+)\]\s*/;
+const REPLY_TAG_RE =
+  /\[\[\s*(?:reply_to_current|reply_to\s*:\s*([^\]\n]+))\s*\]\]/gi;
+// Catches incomplete tags at end of string:
+// - [[reply, [[reply_to, [[reply_to:, [[reply_to:id, [[reply_to_current (unclosed)
+const REPLY_TAG_PARTIAL_RE = /\[\[\s*reply[^\]\n]*\]?\s*$/gi;
 const ENVELOPE_CHANNELS = [
   "WebChat",
   "WhatsApp",
@@ -33,6 +38,17 @@ export function stripEnvelope(text: string): string {
   return text.slice(match[0].length);
 }
 
+export function stripReplyTags(text: string): string {
+  // Pass 1: Remove complete tags
+  let result = text.replace(REPLY_TAG_RE, "");
+  // Pass 2: Remove incomplete tags at end of string
+  result = result.replace(REPLY_TAG_PARTIAL_RE, "");
+  // Pass 3: Safety net - catch any stray [[reply... patterns mid-string
+  // Matches [[reply followed by non-] chars, stopping at ] or whitespace boundary
+  result = result.replace(/\[\[\s*reply(?:_to(?:_current)?)?(?:\s*:\s*[^\s\]\n]*)?\s*/gi, "");
+  return result.trim();
+}
+
 export function extractText(message: unknown): string | null {
   const m = message as Record<string, unknown>;
   const role = typeof m.role === "string" ? m.role : "";
@@ -40,8 +56,8 @@ export function extractText(message: unknown): string | null {
   if (typeof content === "string") {
     const processed =
       role === "assistant"
-        ? stripThinkingTags(content)
-        : stripEnvelope(content);
+        ? stripReplyTags(stripThinkingTags(content))
+        : stripReplyTags(stripEnvelope(content));
     return processed;
   }
   if (Array.isArray(content)) {
@@ -57,14 +73,16 @@ export function extractText(message: unknown): string | null {
       const joined = parts.join("\n");
       const processed =
         role === "assistant"
-          ? stripThinkingTags(joined)
-          : stripEnvelope(joined);
+          ? stripReplyTags(stripThinkingTags(joined))
+          : stripReplyTags(stripEnvelope(joined));
       return processed;
     }
   }
   if (typeof m.text === "string") {
     const processed =
-      role === "assistant" ? stripThinkingTags(m.text) : stripEnvelope(m.text);
+      role === "assistant"
+        ? stripReplyTags(stripThinkingTags(m.text))
+        : stripReplyTags(stripEnvelope(m.text));
     return processed;
   }
   return null;

@@ -13,6 +13,7 @@ import {
   extractTextCached,
   extractThinkingCached,
   formatReasoningMarkdown,
+  stripReplyTags,
 } from "./message-extract";
 import { extractToolCards, renderToolCardSidebar } from "./tool-cards";
 
@@ -79,6 +80,7 @@ export function renderStreamingGroup(
   onOpenSidebar?: (content: string) => void,
   assistant?: AssistantIdentity,
 ) {
+  const cleanedText = stripReplyTags(text);
   const timestamp = new Date(startedAt).toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
@@ -92,7 +94,7 @@ export function renderStreamingGroup(
         ${renderGroupedMessage(
           {
             role: "assistant",
-            content: [{ type: "text", text }],
+            content: [{ type: "text", text: cleanedText }],
             timestamp: startedAt,
           },
           { isStreaming: true, showReasoning: false },
