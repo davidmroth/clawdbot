@@ -340,7 +340,8 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   });
 
   const date = new Date(interaction.ts);
-  const turnId = `t-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}-${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}${String(date.getSeconds()).padStart(2, "0")}`;
+  // Use actual runId as the source of truth for turn identification
+  const turnId = interaction.runId;
 
   return {
     id: interaction.id,
