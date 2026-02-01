@@ -1,10 +1,14 @@
 import type { ClawdbotApp } from "../app";
 
-// Tool call details captured from LLM response
+// Tool call details captured from LLM response and tool execution events
 export type ToolCallInfo = {
   toolName?: string;
   toolArgs?: string;
   toolCallId?: string;
+  // Tool result fields (populated from stream: "tool" events)
+  result?: string;       // Stringified result
+  isError?: boolean;     // Whether result is an error
+  status?: "pending" | "running" | "complete";
 };
 
 export type LlmInteraction = {
@@ -108,6 +112,59 @@ export function handleLlmEvent(state: ClawdbotApp, evt: AgentEventPayload) {
       }
       state.llmDebugHistory = history;
     }
+  } else if (evt.stream === "tool") {
+    // Handle real-time tool execution events
+    const data = evt.data ?? {};
+    const toolCallId = data.toolCallId as string | undefined;
+    const phase = data.phase as string | undefined;
+
+    // Find the interaction by runId
+    const index = state.llmDebugHistory.findIndex((x) => x.runId === evt.runId);
+    if (index === -1 || !toolCallId) return;
+
+    const history = [...state.llmDebugHistory];
+    const existing = history[index];
+    const toolCalls = [...(existing.toolCalls || [])];
+
+    // Find existing tool call entry by toolCallId
+    const tcIndex = toolCalls.findIndex((tc) => tc.toolCallId === toolCallId);
+
+    if (phase === "start") {
+      // Tool execution starting - add or update entry with running status
+      const newTc: ToolCallInfo = {
+        toolCallId,
+        toolName: data.name as string,
+        toolArgs: data.args ? JSON.stringify(data.args) : undefined,
+        status: "running",
+      };
+      if (tcIndex === -1) {
+        toolCalls.push(newTc);
+      } else {
+        toolCalls[tcIndex] = { ...toolCalls[tcIndex], ...newTc };
+      }
+    } else if (phase === "result") {
+      // Tool execution complete - update with result
+      if (tcIndex !== -1) {
+        toolCalls[tcIndex] = {
+          ...toolCalls[tcIndex],
+          result: data.result ? JSON.stringify(data.result) : undefined,
+          isError: data.isError as boolean | undefined,
+          status: "complete",
+        };
+      } else {
+        // Tool call not found, create new entry with result
+        toolCalls.push({
+          toolCallId,
+          toolName: data.name as string,
+          result: data.result ? JSON.stringify(data.result) : undefined,
+          isError: data.isError as boolean | undefined,
+          status: "complete",
+        });
+      }
+    }
+
+    history[index] = { ...existing, toolCalls };
+    state.llmDebugHistory = history;
   }
 }
 

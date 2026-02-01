@@ -697,6 +697,105 @@ const styles = html`
       white-space: pre-wrap;
       word-break: break-all;
     }
+    
+    /* Tool call error state */
+    .tool-call-item.tool-call-error {
+      border-color: var(--trace-error);
+    }
+    
+    /* Status indicators */
+    .tool-status {
+      font-size: 0.75rem;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.25rem;
+      font-weight: 500;
+    }
+    
+    .tool-status-running {
+      background: var(--trace-accent-bg);
+      color: var(--trace-accent);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    .tool-status-success {
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--trace-success);
+    }
+    
+    .tool-status-error {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--trace-error);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    /* Tool result section */
+    .tool-result {
+      border-top: 1px solid var(--trace-card-border);
+      padding: 0.75rem 1rem;
+    }
+    
+    .tool-result-success {
+      background: rgba(34, 197, 94, 0.05);
+    }
+    
+    .tool-result-error {
+      background: rgba(239, 68, 68, 0.05);
+    }
+    
+    .tool-result-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--trace-text-muted);
+      margin-bottom: 0.5rem;
+    }
+    
+    .tool-result-error .tool-result-header {
+      color: var(--trace-error);
+    }
+    
+    .tool-result-content {
+      font-family: var(--trace-mono);
+      font-size: 0.8125rem;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .tool-result-content pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    
+    /* Pending/running state */
+    .tool-result-pending {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--trace-card-border);
+      color: var(--trace-text-muted);
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .tool-spinner {
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid var(--trace-card-border);
+      border-top-color: var(--trace-accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
 
     .modal-close {
       background: transparent;
@@ -959,7 +1058,12 @@ function renderContextModalContent(turn: Turn) {
 function renderToolCallItem(toolCall: any, index: number) {
   const toolName = toolCall.toolName || "unknown";
   const toolArgs = toolCall.toolArgs;
+  const toolResult = toolCall.result;
+  const isError = toolCall.isError;
+  const status = toolCall.status || "pending";
+  
   let parsedArgs: any = null;
+  let parsedResult: any = null;
   
   // Try to parse JSON args for pretty display
   if (toolArgs) {
@@ -970,11 +1074,48 @@ function renderToolCallItem(toolCall: any, index: number) {
     }
   }
   
+  // Try to parse JSON result for pretty display
+  if (toolResult) {
+    try {
+      parsedResult = JSON.parse(toolResult);
+    } catch {
+      parsedResult = toolResult;
+    }
+  }
+  
+  // Status indicator
+  const statusIcon = status === "running" 
+    ? html`<span class="tool-status tool-status-running">Running...</span>`
+    : status === "complete" && isError
+    ? html`<span class="tool-status tool-status-error">Error</span>`
+    : status === "complete"
+    ? html`<span class="tool-status tool-status-success">Done</span>`
+    : nothing;
+  
+  // Result section
+  const resultSection = toolResult !== undefined ? html`
+    <div class="tool-result ${isError ? 'tool-result-error' : 'tool-result-success'}">
+      <div class="tool-result-header">
+        ${isError ? 'Error' : 'Result'}
+      </div>
+      <div class="tool-result-content">
+        ${typeof parsedResult === "string" 
+          ? html`<pre>${parsedResult}</pre>` 
+          : renderJson(parsedResult)}
+      </div>
+    </div>
+  ` : status === "running" ? html`
+    <div class="tool-result-pending">
+      <span class="tool-spinner"></span> Executing...
+    </div>
+  ` : nothing;
+  
   return html`
-    <div class="tool-call-item">
+    <div class="tool-call-item ${isError ? 'tool-call-error' : ''}">
       <div class="tool-call-header">
         <div class="tool-call-icon" .innerHTML=${ICONS.tools}></div>
         <span class="tool-call-name">${toolName}</span>
+        ${statusIcon}
         ${toolCall.toolCallId ? html`<span class="tool-call-id">${toolCall.toolCallId}</span>` : nothing}
       </div>
       ${parsedArgs ? html`
@@ -984,6 +1125,7 @@ function renderToolCallItem(toolCall: any, index: number) {
             : renderJson(parsedArgs)}
         </div>
       ` : nothing}
+      ${resultSection}
     </div>
   `;
 }
