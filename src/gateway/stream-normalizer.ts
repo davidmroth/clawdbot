@@ -21,12 +21,35 @@ export function normalizeChunk(chunk: unknown): StandardChunk | null {
   if (c.partial && typeof c.partial === "object") {
     const partial = c.partial as Record<string, any>;
     let combinedText = "";
+    let hasToolCall = false;
+    let toolCallInfo: { toolName?: string; toolArgs?: string; toolCallId?: string } | null = null;
+    
     if (Array.isArray(partial.content)) {
       for (const part of partial.content) {
-        if (part && typeof part === "object" && part.type === "text" && typeof part.text === "string") {
-          combinedText += part.text;
+        if (part && typeof part === "object") {
+          if (part.type === "text" && typeof part.text === "string") {
+            combinedText += part.text;
+          } else if (part.type === "toolCall" || part.type === "tool_call") {
+            // Detect tool calls in pi-agent-core format
+            hasToolCall = true;
+            // Capture first tool call info for the return value
+            if (!toolCallInfo) {
+              toolCallInfo = {
+                toolCallId: part.id || part.toolCallId,
+                toolName: part.name || part.toolName,
+                toolArgs: typeof part.arguments === "string" 
+                  ? part.arguments 
+                  : part.arguments ? JSON.stringify(part.arguments) : undefined,
+              };
+            }
+          }
         }
       }
+    }
+    
+    // Return tool_call type if we found tool calls (takes priority over text)
+    if (hasToolCall && toolCallInfo) {
+      return { type: "tool_call", ...toolCallInfo };
     }
     if (combinedText || partial.usage) {
       return { type: "text", text: combinedText, usage: partial.usage, isCumulative: true };
