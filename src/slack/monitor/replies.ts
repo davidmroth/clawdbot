@@ -1,5 +1,9 @@
 import { createReplyReferencePlanner } from "../../auto-reply/reply/reply-reference.js";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
+import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
+import {
+  isSilentReplyText,
+  SILENT_REPLY_TOKEN,
+} from "../../auto-reply/tokens.js";
 import type { ChunkMode } from "../../auto-reply/chunk.js";
 import { chunkMarkdownTextWithMode } from "../../auto-reply/chunk.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
@@ -19,9 +23,11 @@ export async function deliverReplies(params: {
 }) {
   for (const payload of params.replies) {
     const threadTs = payload.replyToId ?? params.replyThreadTs;
-    const mediaList = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
-    const text = payload.text ?? "";
-    if (!text && mediaList.length === 0) continue;
+    const mediaList =
+      payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
+    // Sanitize text by stripping any remaining directive tags (e.g., [[reply_to:...]])
+    const parsed = parseReplyDirectives(payload.text ?? "");
+    const text = parsed.text;
 
     if (mediaList.length === 0) {
       const trimmed = text.trim();
@@ -126,9 +132,16 @@ export async function deliverSlackSlashReplies(params: {
   const chunkLimit = Math.min(params.textLimit, 4000);
   for (const payload of params.replies) {
     const textRaw = payload.text?.trim() ?? "";
-    const text = textRaw && !isSilentReplyText(textRaw, SILENT_REPLY_TOKEN) ? textRaw : undefined;
-    const mediaList = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
-    const combined = [text ?? "", ...mediaList.map((url) => url.trim()).filter(Boolean)]
+    const text =
+      textRaw && !isSilentReplyText(textRaw, SILENT_REPLY_TOKEN)
+        ? textRaw
+        : undefined;
+    const mediaList =
+      payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
+    const combined = [
+      text ?? "",
+      ...mediaList.map((url) => url.trim()).filter(Boolean),
+    ]
       .filter(Boolean)
       .join("\n");
     if (!combined) continue;
@@ -138,7 +151,9 @@ export async function deliverSlackSlashReplies(params: {
         ? chunkMarkdownTextWithMode(combined, chunkLimit, chunkMode)
         : [combined];
     const chunks = markdownChunks.flatMap((markdown) =>
-      markdownToSlackMrkdwnChunks(markdown, chunkLimit, { tableMode: params.tableMode }),
+      markdownToSlackMrkdwnChunks(markdown, chunkLimit, {
+        tableMode: params.tableMode,
+      }),
     );
     if (!chunks.length && combined) chunks.push(combined);
     for (const chunk of chunks) {

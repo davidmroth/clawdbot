@@ -6,7 +6,6 @@ import type {
   NormalizedMessage,
   MessageContentItem,
 } from "../types/chat-types";
-import { stripReplyTags } from "./message-extract";
 
 /**
  * Normalize a raw message object into a consistent structure.
@@ -42,16 +41,16 @@ export function normalizeMessage(message: unknown): NormalizedMessage {
   let content: MessageContentItem[] = [];
 
   if (typeof m.content === "string") {
-    content = [{ type: "text", text: stripReplyTags(m.content) }];
+    content = [{ type: "text", text: m.content }];
   } else if (Array.isArray(m.content)) {
     content = m.content.map((item: Record<string, unknown>) => ({
       type: (item.type as MessageContentItem["type"]) || "text",
-      text: typeof item.text === "string" ? stripReplyTags(item.text) : undefined,
+      text: typeof item.text === "string" ? item.text : undefined,
       name: item.name as string | undefined,
       args: item.args || item.arguments,
     }));
   } else if (typeof m.text === "string") {
-    content = [{ type: "text", text: stripReplyTags(m.text) }];
+    content = [{ type: "text", text: m.text }];
   }
 
   const timestamp = typeof m.timestamp === "number" ? m.timestamp : Date.now();

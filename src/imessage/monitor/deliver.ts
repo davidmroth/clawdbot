@@ -1,4 +1,5 @@
 import { chunkTextWithMode, resolveChunkMode } from "../../auto-reply/chunk.js";
+import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import { convertMarkdownTables } from "../../markdown/tables.js";
@@ -16,7 +17,8 @@ export async function deliverReplies(params: {
   maxBytes: number;
   textLimit: number;
 }) {
-  const { replies, target, client, runtime, maxBytes, textLimit, accountId } = params;
+  const { replies, target, client, runtime, maxBytes, textLimit, accountId } =
+    params;
   const cfg = loadConfig();
   const tableMode = resolveMarkdownTableMode({
     cfg,
@@ -25,8 +27,11 @@ export async function deliverReplies(params: {
   });
   const chunkMode = resolveChunkMode(cfg, "imessage", accountId);
   for (const payload of replies) {
-    const mediaList = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
-    const rawText = payload.text ?? "";
+    const mediaList =
+      payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
+    // Sanitize text by stripping any remaining directive tags (e.g., [[reply_to:...]])
+    const parsed = parseReplyDirectives(payload.text ?? "");
+    const rawText = parsed.text;
     const text = convertMarkdownTables(rawText, tableMode);
     if (!text && mediaList.length === 0) continue;
     if (mediaList.length === 0) {
