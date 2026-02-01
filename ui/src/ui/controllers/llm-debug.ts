@@ -67,9 +67,6 @@ export function handleLlmEvent(state: ClawdbotApp, evt: AgentEventPayload) {
     state.llmDebugHistory = [entry, ...state.llmDebugHistory].slice(0, 50);
   } else if (evt.stream === "llm-res") {
     const data = evt.data;
-    // #region agent log
-    console.log('[DEBUG H2] llm-res received:', {runId:evt.runId,hasToolCalls:!!data.toolCalls,toolCallsCount:data.toolCalls?.length||0,isToolCallOnly:data.isToolCallOnly,toolCalls:data.toolCalls});
-    // #endregion
     // Find entry by runId (any status, not just pending)
     const index = state.llmDebugHistory.findIndex(
       (x) => x.runId === evt.runId,
@@ -84,9 +81,6 @@ export function handleLlmEvent(state: ClawdbotApp, evt: AgentEventPayload) {
         ...(existing.toolCalls || []),
         ...newToolCalls,
       ];
-      // #region agent log
-      console.log('[DEBUG H2] aggregating tool calls:', {existingCount:existing.toolCalls?.length||0,newCount:newToolCalls.length,aggregatedCount:aggregatedToolCalls.length});
-      // #endregion
 
       // Accumulate duration
       const totalDuration = (existing.durationMs || 0) + (data.durationMs || 0);
