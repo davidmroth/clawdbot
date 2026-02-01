@@ -13,7 +13,6 @@ import { resolveOAuthDir, resolveStateDir } from "../config/paths.js";
 
 // DEBUG: Pairing debug logging
 const PAIRING_DEBUG = true;
-console.log("[*] PAIRING_DEBUG", PAIRING_DEBUG);
 function pairingLog(msg: string, data?: unknown) {
   if (!PAIRING_DEBUG) return;
   const ts = new Date().toISOString();
@@ -457,7 +456,7 @@ export async function upsertChannelPairingRequest(params: {
         PAIRING_PENDING_MAX > 0 ? PAIRING_PENDING_MAX - 1 : 0,
       );
       reqs = capped;
-      
+
       const code = generateUniqueCode(existingCodes);
       const next: PairingRequest = {
         id,
