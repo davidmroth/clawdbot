@@ -56,7 +56,8 @@ export function buildGatewayConnectionDetails(
 ): GatewayConnectionDetails {
   const config = options.config ?? loadConfig();
   const configPath =
-    options.configPath ?? resolveConfigPath(process.env, resolveStateDir(process.env));
+    options.configPath ??
+    resolveConfigPath(process.env, resolveStateDir(process.env));
   const isRemoteMode = config.gateway?.mode === "remote";
   const remote = isRemoteMode ? config.gateway?.remote : undefined;
   const tlsEnabled = config.gateway?.tls?.enabled === true;
@@ -73,23 +74,30 @@ export function buildGatewayConnectionDetails(
     typeof options.url === "string" && options.url.trim().length > 0
       ? options.url.trim()
       : undefined;
+  const envUrl = process.env.CLAWDBOT_GATEWAY_URL?.trim() || undefined;
   const remoteUrl =
-    typeof remote?.url === "string" && remote.url.trim().length > 0 ? remote.url.trim() : undefined;
-  const remoteMisconfigured = isRemoteMode && !urlOverride && !remoteUrl;
-  const url = urlOverride || remoteUrl || localUrl;
+    typeof remote?.url === "string" && remote.url.trim().length > 0
+      ? remote.url.trim()
+      : undefined;
+  const remoteMisconfigured =
+    isRemoteMode && !urlOverride && !envUrl && !remoteUrl;
+  const url = urlOverride || envUrl || remoteUrl || localUrl;
   const urlSource = urlOverride
     ? "cli --url"
-    : remoteUrl
-      ? "config gateway.remote.url"
-      : remoteMisconfigured
-        ? "missing gateway.remote.url (fallback local)"
-        : preferTailnet && tailnetIPv4
-          ? `local tailnet ${tailnetIPv4}`
-          : "local loopback";
+    : envUrl
+      ? "env CLAWDBOT_GATEWAY_URL"
+      : remoteUrl
+        ? "config gateway.remote.url"
+        : remoteMisconfigured
+          ? "missing gateway.remote.url (fallback local)"
+          : preferTailnet && tailnetIPv4
+            ? `local tailnet ${tailnetIPv4}`
+            : "local loopback";
   const remoteFallbackNote = remoteMisconfigured
     ? "Warn: gateway.mode=remote but gateway.remote.url is missing; set gateway.remote.url or switch gateway.mode=local."
     : undefined;
-  const bindDetail = !urlOverride && !remoteUrl ? `Bind: ${bindMode}` : undefined;
+  const bindDetail =
+    !urlOverride && !remoteUrl ? `Bind: ${bindMode}` : undefined;
   const message = [
     `Gateway target: ${url}`,
     `Source: ${urlSource}`,
@@ -109,23 +117,31 @@ export function buildGatewayConnectionDetails(
   };
 }
 
-export async function callGateway<T = unknown>(opts: CallGatewayOptions): Promise<T> {
+export async function callGateway<T = unknown>(
+  opts: CallGatewayOptions,
+): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const config = opts.config ?? loadConfig();
   const isRemoteMode = config.gateway?.mode === "remote";
   const remote = isRemoteMode ? config.gateway?.remote : undefined;
   const urlOverride =
-    typeof opts.url === "string" && opts.url.trim().length > 0 ? opts.url.trim() : undefined;
+    typeof opts.url === "string" && opts.url.trim().length > 0
+      ? opts.url.trim()
+      : undefined;
+  const envUrl = process.env.CLAWDBOT_GATEWAY_URL?.trim() || undefined;
   const remoteUrl =
-    typeof remote?.url === "string" && remote.url.trim().length > 0 ? remote.url.trim() : undefined;
-  if (isRemoteMode && !urlOverride && !remoteUrl) {
+    typeof remote?.url === "string" && remote.url.trim().length > 0
+      ? remote.url.trim()
+      : undefined;
+  if (isRemoteMode && !urlOverride && !envUrl && !remoteUrl) {
     const configPath =
-      opts.configPath ?? resolveConfigPath(process.env, resolveStateDir(process.env));
+      opts.configPath ??
+      resolveConfigPath(process.env, resolveStateDir(process.env));
     throw new Error(
       [
         "gateway remote mode misconfigured: gateway.remote.url missing",
         `Config: ${configPath}`,
-        "Fix: set gateway.remote.url, or set gateway.mode=local.",
+        "Fix: set gateway.remote.url, set CLAWDBOT_GATEWAY_URL, or set gateway.mode=local.",
       ].join("\n"),
     );
   }
@@ -138,14 +154,24 @@ export async function callGateway<T = unknown>(opts: CallGatewayOptions): Promis
   });
   const url = connectionDetails.url;
   const useLocalTls =
-    config.gateway?.tls?.enabled === true && !urlOverride && !remoteUrl && url.startsWith("wss://");
-  const tlsRuntime = useLocalTls ? await loadGatewayTlsRuntime(config.gateway?.tls) : undefined;
+    config.gateway?.tls?.enabled === true &&
+    !urlOverride &&
+    !remoteUrl &&
+    url.startsWith("wss://");
+  const tlsRuntime = useLocalTls
+    ? await loadGatewayTlsRuntime(config.gateway?.tls)
+    : undefined;
   const remoteTlsFingerprint =
-    isRemoteMode && !urlOverride && remoteUrl && typeof remote?.tlsFingerprint === "string"
+    isRemoteMode &&
+    !urlOverride &&
+    remoteUrl &&
+    typeof remote?.tlsFingerprint === "string"
       ? remote.tlsFingerprint.trim()
       : undefined;
   const overrideTlsFingerprint =
-    typeof opts.tlsFingerprint === "string" ? opts.tlsFingerprint.trim() : undefined;
+    typeof opts.tlsFingerprint === "string"
+      ? opts.tlsFingerprint.trim()
+      : undefined;
   const tlsFingerprint =
     overrideTlsFingerprint ||
     remoteTlsFingerprint ||
@@ -168,7 +194,8 @@ export async function callGateway<T = unknown>(opts: CallGatewayOptions): Promis
       : undefined) ||
     process.env.CLAWDBOT_GATEWAY_PASSWORD?.trim() ||
     (isRemoteMode
-      ? typeof remote?.password === "string" && remote.password.trim().length > 0
+      ? typeof remote?.password === "string" &&
+        remote.password.trim().length > 0
         ? remote.password.trim()
         : undefined
       : typeof authPassword === "string" && authPassword.trim().length > 0
@@ -178,7 +205,11 @@ export async function callGateway<T = unknown>(opts: CallGatewayOptions): Promis
   const formatCloseError = (code: number, reason: string) => {
     const reasonText = reason?.trim() || "no close reason";
     const hint =
-      code === 1006 ? "abnormal closure (no close frame)" : code === 1000 ? "normal closure" : "";
+      code === 1006
+        ? "abnormal closure (no close frame)"
+        : code === 1000
+          ? "normal closure"
+          : "";
     const suffix = hint ? ` ${hint}` : "";
     return `gateway closed (${code}${suffix}): ${reasonText}\n${connectionDetails.message}`;
   };

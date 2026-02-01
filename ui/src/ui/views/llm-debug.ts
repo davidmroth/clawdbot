@@ -59,6 +59,7 @@ const ICONS: Record<string, string> = {
   tools: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
   continuation: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   final_answer: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
   arrow: `<svg class="flow-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`,
   copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
@@ -85,12 +86,12 @@ function downloadJson(data: unknown, filename: string) {
 function turnToExportFormat(turn: Turn) {
   // Map phase types to export key names (following UI structure)
   const phaseTypeToKey: Record<string, string> = {
-    user: 'user_message',
-    context: 'context',
-    continuation: 'model_continuation',
-    final_answer: 'final_answer',
-    reasoning: 'reasoning',
-    tools: 'tools',
+    user: "user_message",
+    context: "context",
+    continuation: "model_continuation",
+    final_answer: "final_answer",
+    reasoning: "reasoning",
+    tools: "tools",
   };
 
   // Core metadata (NOT duplicating context fields which are in the context phase)
@@ -113,7 +114,7 @@ function turnToExportFormat(turn: Turn) {
     if (phase.visible) {
       const key = phaseTypeToKey[phase.type] ?? phase.type;
       // For user_message, extract text content instead of raw message object
-      if (phase.type === 'user') {
+      if (phase.type === "user") {
         formattedTurn[key] = extractTextContent(phase.content);
       } else {
         formattedTurn[key] = phase.content;
@@ -128,8 +129,91 @@ function turnToExportFormat(turn: Turn) {
 }
 
 // ============================================================================
+// Formatting Helpers
+// ============================================================================
+
+function formatTokenCount(count: number | undefined): string {
+  if (count === undefined || count === null) return "—";
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  return String(count);
+}
+
+// ============================================================================
 // Data Transformation
 // ============================================================================
+
+/**
+ * Formats error content for display in the trace UI.
+ * Detects specific error types and provides helpful messages.
+ */
+function formatErrorContent(
+  error: string,
+  model: string,
+): { title: string; message: string; hint?: string } {
+  // Detect thinking-not-supported errors (Ollama format)
+  // Match patterns like: "400 think value \"low\" is not supported for this model"
+  // or: "think value \"low\" is not supported for this model"
+  if (
+    /think(?:ing)?\s+(?:value\s+)?["']?\w+["']?\s+is\s+not\s+supported/i.test(
+      error,
+    )
+  ) {
+    return {
+      title: "Thinking Mode Not Supported",
+      message: `The model "${model}" does not support thinking/reasoning mode.`,
+      hint: `To disable thinking for this model, add to your clawdbot.config.json:
+
+{
+  "agents": {
+    "defaults": {
+      "models": {
+        "ollama/${model}": {
+          "params": {
+            "thinking": "off"
+          }
+        }
+      }
+    }
+  }
+}
+
+Or set a global default:
+{
+  "agents": {
+    "defaults": {
+      "thinkingDefault": "off"
+    }
+  }
+}`,
+    };
+  }
+
+  // Detect rate limit errors
+  if (/rate[_ ]limit|too many requests|429/i.test(error)) {
+    return {
+      title: "Rate Limited",
+      message:
+        "The API rate limit was exceeded. Please wait a moment and try again.",
+    };
+  }
+
+  // Detect context overflow
+  if (/context.*overflow|context.*length|too large|too long/i.test(error)) {
+    return {
+      title: "Context Overflow",
+      message: "The prompt was too large for the model's context window.",
+      hint: "Try reducing the conversation length or using a model with a larger context window.",
+    };
+  }
+
+  // Generic error
+  return {
+    title: "Error",
+    message: error,
+  };
+}
 
 function extractTextContent(msg: any): string {
   if (typeof msg.content === "string") return msg.content;
@@ -157,7 +241,11 @@ function extractToolCallsFromMessages(messages: any[]): Array<{
   toolArgs?: string;
   toolCallId?: string;
 }> {
-  const toolCalls: Array<{ toolName?: string; toolArgs?: string; toolCallId?: string }> = [];
+  const toolCalls: Array<{
+    toolName?: string;
+    toolArgs?: string;
+    toolCallId?: string;
+  }> = [];
 
   for (const message of messages) {
     const content = Array.isArray(message?.content) ? message.content : [];
@@ -176,17 +264,23 @@ function extractToolCallsFromMessages(messages: any[]): Array<{
   return toolCalls;
 }
 
-function dedupeToolCalls(toolCalls: Array<{
-  toolName?: string;
-  toolArgs?: string;
-  toolCallId?: string;
-}>): Array<{
+function dedupeToolCalls(
+  toolCalls: Array<{
+    toolName?: string;
+    toolArgs?: string;
+    toolCallId?: string;
+  }>,
+): Array<{
   toolName?: string;
   toolArgs?: string;
   toolCallId?: string;
 }> {
   const seen = new Set<string>();
-  const deduped: Array<{ toolName?: string; toolArgs?: string; toolCallId?: string }> = [];
+  const deduped: Array<{
+    toolName?: string;
+    toolArgs?: string;
+    toolCallId?: string;
+  }> = [];
 
   for (const call of toolCalls) {
     const key = call.toolCallId
@@ -202,7 +296,7 @@ function dedupeToolCalls(toolCalls: Array<{
 
 function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   const messages = interaction.messages || [];
-  
+
   // Identify user vs system initiated
   // This logic is preserved from original file as it seems app-specific
   const userMessages = messages.filter((m: any) => m.role === "user");
@@ -221,35 +315,118 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
 
   // Data extraction
   const systemPrompt = interaction.system;
-  
+
   // Find the actual last user message (role === 'user'), not just the last message in the array
   // The last message could be a tool result, which is not the user's query
-  const lastUserMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
-  
+  const lastUserMessage =
+    userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
+
   // History is everything except the last user message
-  const lastUserMsgIndex = lastUserMessage ? messages.lastIndexOf(lastUserMessage) : -1;
-  const historyMessages = lastUserMsgIndex > 0 ? messages.slice(0, lastUserMsgIndex) : [];
-  const lastSystemMsgIndex = lastUserMsgIndex === -1
-    ? messages.map((msg: any) => msg?.role).lastIndexOf("system")
+  const lastUserMsgIndex = lastUserMessage
+    ? messages.lastIndexOf(lastUserMessage)
     : -1;
+  const historyMessages =
+    lastUserMsgIndex > 0 ? messages.slice(0, lastUserMsgIndex) : [];
+  const lastSystemMsgIndex =
+    lastUserMsgIndex === -1
+      ? messages.map((msg: any) => msg?.role).lastIndexOf("system")
+      : -1;
   const boundaryIndex =
     lastUserMsgIndex >= 0 ? lastUserMsgIndex : lastSystemMsgIndex;
   const runScopedMessages =
     boundaryIndex >= 0 ? messages.slice(boundaryIndex + 1) : [];
-  
+
   const toolDefinitions = interaction.tools || [];
-  
+
   // Parse response for reasoning/thinking
   // Assuming <think> tags or similar if available, otherwise treating all as response for now
   // In a real implementation, we would parse structured output if the model provides it
   const fullResponse = interaction.responseText || "";
   let reasoning = "";
-  let finalAnswer = fullResponse;
-  
-  const thinkMatch = fullResponse.match(/<think>([\s\S]*?)<\/think>/i);
-  if (thinkMatch) {
-    reasoning = thinkMatch[1].trim();
-    finalAnswer = fullResponse.replace(/<think>[\s\S]*?<\/think>/i, "").trim();
+  let finalAnswer:
+    | string
+    | {
+        isError: true;
+        title: string;
+        message: string;
+        hint?: string;
+        raw?: string;
+      } = fullResponse;
+
+  // Helper to extract error message from various formats
+  function extractErrorMessage(): string | null {
+    // First check explicit responseError
+    if (interaction.responseError) {
+      return interaction.responseError;
+    }
+
+    // Helper to unescape JSON string escapes
+    function unescapeJsonString(s: string): string {
+      return s
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\")
+        .replace(/\\n/g, "\n");
+    }
+
+    // Check if response contains a DEBUG message with embedded JSON
+    // Format: "[DEBUG: Could not parse response text. Raw chunk sample: {...}]"
+    if (
+      fullResponse.includes("[DEBUG:") &&
+      fullResponse.includes("errorMessage")
+    ) {
+      // Try to extract the errorMessage from the embedded JSON
+      // Use a pattern that handles escaped quotes: match until unescaped "
+      const errorMessageMatch = fullResponse.match(
+        /"errorMessage"\s*:\s*"((?:[^"\\]|\\.)*)"/,
+      );
+      if (errorMessageMatch?.[1]) {
+        return unescapeJsonString(errorMessageMatch[1]);
+      }
+    }
+
+    // Check for stopReason: error in embedded JSON
+    if (
+      fullResponse.includes('"stopReason"') &&
+      fullResponse.includes('"error"')
+    ) {
+      const errorMessageMatch = fullResponse.match(
+        /"errorMessage"\s*:\s*"((?:[^"\\]|\\.)*)"/,
+      );
+      if (errorMessageMatch?.[1]) {
+        return unescapeJsonString(errorMessageMatch[1]);
+      }
+    }
+
+    // Check if the response itself looks like a raw error message
+    const thinkErrorMatch = fullResponse.match(
+      /think(?:ing)?\s+(?:value\s+)?["']?(\w+)["']?\s+is\s+not\s+supported/i,
+    );
+    if (thinkErrorMatch) {
+      return fullResponse;
+    }
+
+    return null;
+  }
+
+  // Check for error response - ALWAYS check content, not just status
+  const errorMessage = extractErrorMessage();
+
+  if (errorMessage) {
+    const formattedError = formatErrorContent(errorMessage, interaction.model);
+    finalAnswer = {
+      isError: true,
+      ...formattedError,
+      raw: fullResponse || interaction.responseError,
+    };
+  } else {
+    // Normal response - parse for thinking blocks
+    const thinkMatch = fullResponse.match(/<think>([\s\S]*?)<\/think>/i);
+    if (thinkMatch) {
+      reasoning = thinkMatch[1].trim();
+      finalAnswer = fullResponse
+        .replace(/<think>[\s\S]*?<\/think>/i, "")
+        .trim();
+    }
   }
 
   // Phases construction (Variant A)
@@ -269,11 +446,15 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   // If explicit system prompt is missing, try to find it in history
   let effectiveSystemPrompt = systemPrompt;
   let effectiveHistory = [...historyMessages];
-  
+
   if (!effectiveSystemPrompt) {
-    const systemMsgIndex = historyMessages.findIndex((m: any) => m.role === "system");
+    const systemMsgIndex = historyMessages.findIndex(
+      (m: any) => m.role === "system",
+    );
     if (systemMsgIndex !== -1) {
-      effectiveSystemPrompt = extractTextContent(historyMessages[systemMsgIndex]);
+      effectiveSystemPrompt = extractTextContent(
+        historyMessages[systemMsgIndex],
+      );
       effectiveHistory.splice(systemMsgIndex, 1);
     }
   }
@@ -329,14 +510,17 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     visible: true,
   });
 
-  // 6. Final Answer (Cleaned)
+  // 6. Final Answer (Cleaned) or Error
+  const isError =
+    typeof finalAnswer === "object" && (finalAnswer as any).isError;
   phases.push({
     type: "final_answer",
-    icon: ICONS.final_answer,
-    label: "Final answer",
-    tooltip: "Cleaned response to user",
+    icon: isError ? ICONS.error : ICONS.final_answer,
+    label: isError ? "Error" : "Final answer",
+    tooltip: isError ? "LLM request failed" : "Cleaned response to user",
     content: finalAnswer,
     visible: true,
+    status: isError ? "failure" : undefined,
   });
 
   const date = new Date(interaction.ts);
@@ -356,7 +540,10 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
     raw: interaction,
     isSystemInitiated,
     sourceLabel,
-    systemPrompt: typeof systemPrompt === "string" ? systemPrompt : JSON.stringify(systemPrompt),
+    systemPrompt:
+      typeof systemPrompt === "string"
+        ? systemPrompt
+        : JSON.stringify(systemPrompt),
     historyMessages,
     lastUserMessage,
     toolDefinitions,
@@ -380,16 +567,16 @@ const styles = html`
       --trace-card-border: var(--border);
       --trace-text: var(--text);
       --trace-text-muted: var(--muted);
-      
+
       /* Use Blue for the trace view main accent to distinguish from Red app accent */
-      --trace-accent: var(--info); 
+      --trace-accent: var(--info);
       --trace-accent-bg: rgba(59, 130, 246, 0.1); /* blue with opacity */
-      
+
       --trace-success: var(--ok);
       --trace-success-bg: var(--ok-subtle);
       --trace-warning: var(--warn);
       --trace-error: var(--danger);
-      
+
       --trace-font: var(--font-body);
       --trace-mono: var(--mono);
       --trace-radius: var(--radius-lg);
@@ -451,7 +638,7 @@ const styles = html`
       border-color: var(--trace-accent);
       color: var(--trace-accent);
     }
-    
+
     .controls {
       display: flex;
       gap: 0.5rem;
@@ -498,7 +685,11 @@ const styles = html`
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: linear-gradient(to right, var(--trace-accent-bg), transparent);
+      background: linear-gradient(
+        to right,
+        var(--trace-accent-bg),
+        transparent
+      );
     }
 
     .turn-meta {
@@ -559,7 +750,7 @@ const styles = html`
       text-align: center;
       white-space: nowrap;
     }
-    
+
     .phase-count-badge {
       display: inline-flex;
       align-items: center;
@@ -574,7 +765,7 @@ const styles = html`
       background: var(--trace-accent);
       border-radius: 9999px;
     }
-    
+
     .phase-arrow {
       color: var(--trace-text-muted);
       opacity: 0.3;
@@ -638,21 +829,21 @@ const styles = html`
     .modal-content-scroll {
       padding: 1.5rem;
     }
-    
+
     /* Tool Calls List */
     .tool-calls-list {
       display: flex;
       flex-direction: column;
       gap: 1rem;
     }
-    
+
     .tool-call-item {
       background: var(--trace-bg);
       border: 1px solid var(--trace-card-border);
       border-radius: var(--trace-radius-sm);
       overflow: hidden;
     }
-    
+
     .tool-call-header {
       display: flex;
       align-items: center;
@@ -661,48 +852,48 @@ const styles = html`
       background: var(--trace-accent-bg);
       border-bottom: 1px solid var(--trace-card-border);
     }
-    
+
     .tool-call-icon {
       width: 1rem;
       height: 1rem;
       color: var(--trace-accent);
     }
-    
+
     .tool-call-icon svg {
       width: 100%;
       height: 100%;
     }
-    
+
     .tool-call-name {
       font-weight: 600;
       font-size: 0.875rem;
       color: var(--trace-text);
     }
-    
+
     .tool-call-id {
       font-size: 0.75rem;
       color: var(--trace-text-muted);
       font-family: var(--trace-mono);
       margin-left: auto;
     }
-    
+
     .tool-call-args {
       padding: 0.75rem 1rem;
       font-family: var(--trace-mono);
       font-size: 0.8125rem;
       overflow-x: auto;
     }
-    
+
     .tool-call-args code {
       white-space: pre-wrap;
       word-break: break-all;
     }
-    
+
     /* Tool call error state */
     .tool-call-item.tool-call-error {
       border-color: var(--trace-error);
     }
-    
+
     /* Status indicators */
     .tool-status {
       font-size: 0.75rem;
@@ -710,42 +901,47 @@ const styles = html`
       border-radius: 0.25rem;
       font-weight: 500;
     }
-    
+
     .tool-status-running {
       background: var(--trace-accent-bg);
       color: var(--trace-accent);
       animation: pulse 1.5s ease-in-out infinite;
     }
-    
+
     .tool-status-success {
       background: rgba(34, 197, 94, 0.1);
       color: var(--trace-success);
     }
-    
+
     .tool-status-error {
       background: rgba(239, 68, 68, 0.1);
       color: var(--trace-error);
     }
-    
+
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
     }
-    
+
     /* Tool result section */
     .tool-result {
       border-top: 1px solid var(--trace-card-border);
       padding: 0.75rem 1rem;
     }
-    
+
     .tool-result-success {
       background: rgba(34, 197, 94, 0.05);
     }
-    
+
     .tool-result-error {
       background: rgba(239, 68, 68, 0.05);
     }
-    
+
     .tool-result-header {
       font-size: 0.75rem;
       font-weight: 600;
@@ -754,11 +950,11 @@ const styles = html`
       color: var(--trace-text-muted);
       margin-bottom: 0.5rem;
     }
-    
+
     .tool-result-error .tool-result-header {
       color: var(--trace-error);
     }
-    
+
     .tool-result-content {
       font-family: var(--trace-mono);
       font-size: 0.8125rem;
@@ -766,13 +962,13 @@ const styles = html`
       max-height: 300px;
       overflow-y: auto;
     }
-    
+
     .tool-result-content pre {
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
     }
-    
+
     /* Pending/running state */
     .tool-result-pending {
       padding: 0.75rem 1rem;
@@ -783,7 +979,7 @@ const styles = html`
       align-items: center;
       gap: 0.5rem;
     }
-    
+
     .tool-spinner {
       width: 1rem;
       height: 1rem;
@@ -792,9 +988,11 @@ const styles = html`
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
-    
+
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .modal-close {
@@ -818,7 +1016,7 @@ const styles = html`
       overflow: hidden;
       background: var(--trace-bg); /* Slightly distinct from card bg */
     }
-    
+
     details.accordion summary {
       padding: 1rem;
       background: var(--bg-elevated); /* Explicit elevated bg */
@@ -832,19 +1030,19 @@ const styles = html`
       user-select: none;
       list-style: none;
     }
-    
+
     details.accordion summary::-webkit-details-marker {
       display: none;
     }
-    
+
     details.accordion summary::after {
-      content: '+';
+      content: "+";
       font-size: 1.25rem;
       color: var(--trace-text-muted);
     }
-    
+
     details.accordion[open] summary::after {
-      content: '−';
+      content: "−";
     }
 
     details.accordion[open] summary {
@@ -858,23 +1056,34 @@ const styles = html`
     }
 
     /* ========== JSON Viewer ========== */
-    .json-key { color: var(--trace-accent); }
-    .json-string { color: var(--ok); }
-    .json-number { color: var(--warn); }
-    .json-boolean { color: #db2777; }
-    .json-null { color: var(--trace-text-muted); }
-    
+    .json-key {
+      color: var(--trace-accent);
+    }
+    .json-string {
+      color: var(--ok);
+    }
+    .json-number {
+      color: var(--warn);
+    }
+    .json-boolean {
+      color: #db2777;
+    }
+    .json-null {
+      color: var(--trace-text-muted);
+    }
+
     .json-block {
       font-family: var(--trace-mono);
       font-size: 0.813rem;
       line-height: 1.5;
       color: var(--trace-text);
     }
-    
-    .json-object, .json-array {
+
+    .json-object,
+    .json-array {
       margin-left: 1.5rem;
     }
-    
+
     .json-collapser {
       cursor: pointer;
       user-select: none;
@@ -885,20 +1094,44 @@ const styles = html`
     }
 
     /* ========== Helper Classes ========== */
-    .bg-user { background-color: var(--bg-hover); }
-    .text-mono { font-family: var(--trace-mono); white-space: pre-wrap; color: var(--trace-text); }
-    .p-4 { padding: 1rem; }
-    .rounded { border-radius: var(--trace-radius-sm); }
-    .border { border: 1px solid var(--trace-card-border); }
+    .bg-user {
+      background-color: var(--bg-hover);
+    }
+    .text-mono {
+      font-family: var(--trace-mono);
+      white-space: pre-wrap;
+      color: var(--trace-text);
+    }
+    .p-4 {
+      padding: 1rem;
+    }
+    .rounded {
+      border-radius: var(--trace-radius-sm);
+    }
+    .border {
+      border: 1px solid var(--trace-card-border);
+    }
 
     /* ========== Animations ========== */
     @keyframes slideUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
     @keyframes scaleIn {
-      from { opacity: 0; transform: scale(0.95); }
-      to { opacity: 1; transform: scale(1); }
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
     }
   </style>
 `;
@@ -910,70 +1143,102 @@ const styles = html`
 function renderJson(data: unknown, level = 0): TemplateResult {
   if (data === null) return html`<span class="json-null">null</span>`;
   if (data === undefined) return html`<span class="json-null">undefined</span>`;
-  
-  if (typeof data === 'string') return html`<span class="json-string">"${data}"</span>`;
-  if (typeof data === 'number') return html`<span class="json-number">${data}</span>`;
-  if (typeof data === 'boolean') return html`<span class="json-boolean">${data}</span>`;
-  
+
+  if (typeof data === "string")
+    return html`<span class="json-string">"${data}"</span>`;
+  if (typeof data === "number")
+    return html`<span class="json-number">${data}</span>`;
+  if (typeof data === "boolean")
+    return html`<span class="json-boolean">${data}</span>`;
+
   if (Array.isArray(data)) {
     if (data.length === 0) return html`[]`;
     return html`
       <div>
         <span>[</span>
         <div class="json-array">
-          ${data.map((item, i) => html`
-            <div>
-              ${renderJson(item, level + 1)}${i < data.length - 1 ? ',' : ''}
-            </div>
-          `)}
+          ${data.map(
+            (item, i) => html`
+              <div>
+                ${renderJson(item, level + 1)}${i < data.length - 1 ? "," : ""}
+              </div>
+            `,
+          )}
         </div>
         <span>]</span>
       </div>
     `;
   }
-  
-  if (typeof data === 'object') {
+
+  if (typeof data === "object") {
     const keys = Object.keys(data as object);
     if (keys.length === 0) return html`{}`;
     return html`
       <div>
         <span>{</span>
         <div class="json-object">
-          ${keys.map((key, i) => html`
-            <div>
-              <span class="json-key">"${key}"</span>: 
-              ${renderJson((data as any)[key], level + 1)}${i < keys.length - 1 ? ',' : ''}
-            </div>
-          `)}
+          ${keys.map(
+            (key, i) => html`
+              <div>
+                <span class="json-key">"${key}"</span>:
+                ${renderJson((data as any)[key], level + 1)}${i <
+                keys.length - 1
+                  ? ","
+                  : ""}
+              </div>
+            `,
+          )}
         </div>
         <span>}</span>
       </div>
     `;
   }
-  
+
   return html`<span>${String(data)}</span>`;
 }
 
-function renderPhaseIcon(phase: TurnPhase, index: number, total: number, onClick: () => void) {
+function renderPhaseIcon(
+  phase: TurnPhase,
+  index: number,
+  total: number,
+  onClick: () => void,
+) {
   if (!phase.visible) return nothing;
-  
+
   // Show count badge for phases with multiple items (e.g., tool calls)
-  const countBadge = phase.count && phase.count > 0 
-    ? html`<span class="phase-count-badge">${phase.count}</span>` 
-    : nothing;
-  
+  const countBadge =
+    phase.count && phase.count > 0
+      ? html`<span class="phase-count-badge">${phase.count}</span>`
+      : nothing;
+
+  // Check if this is an error phase
+  const isError = phase.status === "failure";
+  const iconStyle = isError ? "color: var(--trace-error);" : "";
+  const labelStyle = isError
+    ? "color: var(--trace-error); font-weight: 600;"
+    : "";
+
   return html`
     <div class="phase-item" @click=${onClick} title=${phase.tooltip}>
-      <div class="phase-icon" .innerHTML=${phase.icon}></div>
-      <span class="phase-label">${phase.label}${countBadge}</span>
+      <div
+        class="phase-icon"
+        style="${iconStyle}"
+        .innerHTML=${phase.icon}
+      ></div>
+      <span class="phase-label" style="${labelStyle}"
+        >${phase.label}${countBadge}</span
+      >
     </div>
-    ${index < total - 1 ? html`<div class="phase-arrow" .innerHTML=${ICONS.arrow}></div>` : nothing}
+    ${index < total - 1
+      ? html`<div class="phase-arrow" .innerHTML=${ICONS.arrow}></div>`
+      : nothing}
   `;
 }
 
 function renderContextModalContent(turn: Turn) {
-  const { systemPrompt, historyMessages, lastUserMessage, toolDefinitions } = turn;
-  
+  const { systemPrompt, historyMessages, lastUserMessage, toolDefinitions } =
+    turn;
+
   // Tags/Pills
   const pills = [
     { label: "Model", value: `${turn.provider}/${turn.model}` },
@@ -983,31 +1248,48 @@ function renderContextModalContent(turn: Turn) {
 
   return html`
     <div class="modal-content-scroll">
-      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
-        ${pills.map(p => html`
-          <span class="turn-badge" style="font-size: 0.75rem; background: var(--trace-bg);">
-            <span style="color: var(--trace-text-muted)">${p.label}:</span> ${p.value}
-          </span>
-        `)}
+      <div
+        style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem;"
+      >
+        ${pills.map(
+          (p) => html`
+            <span
+              class="turn-badge"
+              style="font-size: 0.75rem; background: var(--trace-bg);"
+            >
+              <span style="color: var(--trace-text-muted)">${p.label}:</span>
+              ${p.value}
+            </span>
+          `,
+        )}
       </div>
 
       <!-- 1. System Prompt -->
       <details class="accordion" ?open=${true}>
         <summary>System Prompt</summary>
         <div class="accordion-content">
-          <div class="text-mono p-4 bg-user rounded border">${systemPrompt || "No system prompt"}</div>
+          <div class="text-mono p-4 bg-user rounded border">
+            ${systemPrompt || "No system prompt"}
+          </div>
         </div>
       </details>
 
       <!-- 2. Conversation History -->
       <details class="accordion">
-        <summary>Conversation History (${historyMessages.length} messages)</summary>
+        <summary>
+          Conversation History (${historyMessages.length} messages)
+        </summary>
         <div class="accordion-content">
-          ${historyMessages.length === 0 ? html`<div class="p-4 text-mono" style="color: var(--trace-text-muted)">No history</div>` : html`
-            <div class="json-block">
-              ${renderJson(historyMessages)}
-            </div>
-          `}
+          ${historyMessages.length === 0
+            ? html`<div
+                class="p-4 text-mono"
+                style="color: var(--trace-text-muted)"
+              >
+                No history
+              </div>`
+            : html`
+                <div class="json-block">${renderJson(historyMessages)}</div>
+              `}
         </div>
       </details>
 
@@ -1016,10 +1298,16 @@ function renderContextModalContent(turn: Turn) {
         <summary>Current User Message</summary>
         <div class="accordion-content">
           <div class="p-4 bg-user rounded border">
-            ${lastUserMessage ? extractTextContent(lastUserMessage) : "No user message found"}
+            ${lastUserMessage
+              ? extractTextContent(lastUserMessage)
+              : "No user message found"}
           </div>
           <div style="margin-top: 1rem">
-            <h4 style="font-size: 0.75rem; color: var(--trace-text-muted); text-transform: uppercase;">Raw JSON</h4>
+            <h4
+              style="font-size: 0.75rem; color: var(--trace-text-muted); text-transform: uppercase;"
+            >
+              Raw JSON
+            </h4>
             <div class="json-block border rounded p-4">
               ${renderJson(lastUserMessage)}
             </div>
@@ -1028,16 +1316,16 @@ function renderContextModalContent(turn: Turn) {
       </details>
 
       <!-- 4. Tool Definitions -->
-      ${toolDefinitions && toolDefinitions.length > 0 ? html`
-        <details class="accordion">
-          <summary>Tool Definitions (${toolDefinitions.length})</summary>
-          <div class="accordion-content">
-            <div class="json-block">
-              ${renderJson(toolDefinitions)}
-            </div>
-          </div>
-        </details>
-      ` : nothing}
+      ${toolDefinitions && toolDefinitions.length > 0
+        ? html`
+            <details class="accordion">
+              <summary>Tool Definitions (${toolDefinitions.length})</summary>
+              <div class="accordion-content">
+                <div class="json-block">${renderJson(toolDefinitions)}</div>
+              </div>
+            </details>
+          `
+        : nothing}
 
       <!-- 5. Metadata -->
       <details class="accordion">
@@ -1046,7 +1334,7 @@ function renderContextModalContent(turn: Turn) {
           <div class="json-block">
             ${renderJson({
               usage: turn.usage,
-              config: turn.raw.config
+              config: turn.raw.config,
             })}
           </div>
         </div>
@@ -1061,10 +1349,10 @@ function renderToolCallItem(toolCall: any, index: number) {
   const toolResult = toolCall.result;
   const isError = toolCall.isError;
   const status = toolCall.status || "pending";
-  
+
   let parsedArgs: any = null;
   let parsedResult: any = null;
-  
+
   // Try to parse JSON args for pretty display
   if (toolArgs) {
     try {
@@ -1073,7 +1361,7 @@ function renderToolCallItem(toolCall: any, index: number) {
       parsedArgs = toolArgs;
     }
   }
-  
+
   // Try to parse JSON result for pretty display
   if (toolResult) {
     try {
@@ -1082,49 +1370,63 @@ function renderToolCallItem(toolCall: any, index: number) {
       parsedResult = toolResult;
     }
   }
-  
+
   // Status indicator
-  const statusIcon = status === "running" 
-    ? html`<span class="tool-status tool-status-running">Running...</span>`
-    : status === "complete" && isError
-    ? html`<span class="tool-status tool-status-error">Error</span>`
-    : status === "complete"
-    ? html`<span class="tool-status tool-status-success">Done</span>`
-    : nothing;
-  
+  const statusIcon =
+    status === "running"
+      ? html`<span class="tool-status tool-status-running">Running...</span>`
+      : status === "complete" && isError
+        ? html`<span class="tool-status tool-status-error">Error</span>`
+        : status === "complete"
+          ? html`<span class="tool-status tool-status-success">Done</span>`
+          : nothing;
+
   // Result section
-  const resultSection = toolResult !== undefined ? html`
-    <div class="tool-result ${isError ? 'tool-result-error' : 'tool-result-success'}">
-      <div class="tool-result-header">
-        ${isError ? 'Error' : 'Result'}
-      </div>
-      <div class="tool-result-content">
-        ${typeof parsedResult === "string" 
-          ? html`<pre>${parsedResult}</pre>` 
-          : renderJson(parsedResult)}
-      </div>
-    </div>
-  ` : status === "running" ? html`
-    <div class="tool-result-pending">
-      <span class="tool-spinner"></span> Executing...
-    </div>
-  ` : nothing;
-  
+  const resultSection =
+    toolResult !== undefined
+      ? html`
+          <div
+            class="tool-result ${isError
+              ? "tool-result-error"
+              : "tool-result-success"}"
+          >
+            <div class="tool-result-header">
+              ${isError ? "Error" : "Result"}
+            </div>
+            <div class="tool-result-content">
+              ${typeof parsedResult === "string"
+                ? html`<pre>${parsedResult}</pre>`
+                : renderJson(parsedResult)}
+            </div>
+          </div>
+        `
+      : status === "running"
+        ? html`
+            <div class="tool-result-pending">
+              <span class="tool-spinner"></span> Executing...
+            </div>
+          `
+        : nothing;
+
   return html`
-    <div class="tool-call-item ${isError ? 'tool-call-error' : ''}">
+    <div class="tool-call-item ${isError ? "tool-call-error" : ""}">
       <div class="tool-call-header">
         <div class="tool-call-icon" .innerHTML=${ICONS.tools}></div>
         <span class="tool-call-name">${toolName}</span>
         ${statusIcon}
-        ${toolCall.toolCallId ? html`<span class="tool-call-id">${toolCall.toolCallId}</span>` : nothing}
+        ${toolCall.toolCallId
+          ? html`<span class="tool-call-id">${toolCall.toolCallId}</span>`
+          : nothing}
       </div>
-      ${parsedArgs ? html`
-        <div class="tool-call-args">
-          ${typeof parsedArgs === "string" 
-            ? html`<code>${parsedArgs}</code>` 
-            : renderJson(parsedArgs)}
-        </div>
-      ` : nothing}
+      ${parsedArgs
+        ? html`
+            <div class="tool-call-args">
+              ${typeof parsedArgs === "string"
+                ? html`<code>${parsedArgs}</code>`
+                : renderJson(parsedArgs)}
+            </div>
+          `
+        : nothing}
       ${resultSection}
     </div>
   `;
@@ -1133,25 +1435,30 @@ function renderToolCallItem(toolCall: any, index: number) {
 function renderGenericModalContent(phase: TurnPhase) {
   const content = phase.content;
   const isString = typeof content === "string";
-  
+
   if (phase.type === "user") {
     // Specialized user view if not in context modal
     return html`
       <div class="modal-content-scroll">
-         <div class="p-4 bg-user rounded border text-mono" style="font-size: 0.938rem;">
-           ${extractTextContent(content)}
-         </div>
+        <div
+          class="p-4 bg-user rounded border text-mono"
+          style="font-size: 0.938rem;"
+        >
+          ${extractTextContent(content)}
+        </div>
       </div>
     `;
   }
-  
+
   if (phase.type === "tools" && Array.isArray(content)) {
     // Specialized tools view showing each tool call with icon
     const toolCalls = content as any[];
     if (toolCalls.length === 0) {
       return html`
         <div class="modal-content-scroll">
-          <div class="p-4 text-mono" style="color: var(--trace-text-muted)">No tool calls</div>
+          <div class="p-4 text-mono" style="color: var(--trace-text-muted)">
+            No tool calls
+          </div>
         </div>
       `;
     }
@@ -1164,39 +1471,207 @@ function renderGenericModalContent(phase: TurnPhase) {
     `;
   }
 
+  // Check for structured error content (from final_answer with error)
+  if (
+    phase.type === "final_answer" &&
+    content &&
+    typeof content === "object" &&
+    (content as any).isError
+  ) {
+    const errorContent = content as {
+      title: string;
+      message: string;
+      hint?: string;
+      raw?: string;
+    };
+    return html`
+      <div class="modal-content-scroll">
+        <div
+          class="error-display"
+          style="
+          background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05));
+          border: 1px solid var(--trace-error);
+          border-radius: var(--trace-radius);
+          padding: 1.5rem;
+        "
+        >
+          <div
+            style="
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+          "
+          >
+            <div
+              style="
+              width: 24px;
+              height: 24px;
+              background: var(--trace-error);
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-weight: bold;
+              font-size: 14px;
+            "
+            >
+              !
+            </div>
+            <h3
+              style="
+              margin: 0;
+              color: var(--trace-error);
+              font-size: 1.125rem;
+              font-weight: 600;
+            "
+            >
+              ${errorContent.title}
+            </h3>
+          </div>
+
+          <p
+            style="
+            color: var(--trace-text);
+            margin: 0 0 1rem 0;
+            font-size: 0.938rem;
+            line-height: 1.5;
+          "
+          >
+            ${errorContent.message}
+          </p>
+
+          ${errorContent.hint
+            ? html`
+                <div
+                  style="
+              background: var(--trace-card-bg);
+              border: 1px solid var(--trace-card-border);
+              border-left: 3px solid var(--trace-accent);
+              border-radius: var(--trace-radius-sm);
+              padding: 1rem;
+              margin-top: 1rem;
+            "
+                >
+                  <div
+                    style="
+                font-weight: 600;
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--trace-accent);
+                margin-bottom: 0.5rem;
+              "
+                  >
+                    💡 Suggested Fix
+                  </div>
+                  <pre
+                    style="
+                margin: 0;
+                font-family: var(--trace-mono);
+                font-size: 0.8125rem;
+                white-space: pre-wrap;
+                color: var(--trace-text);
+                line-height: 1.6;
+              "
+                  >
+${errorContent.hint}</pre
+                  >
+                </div>
+              `
+            : nothing}
+          ${errorContent.raw
+            ? html`
+                <details style="margin-top: 1rem;">
+                  <summary
+                    style="
+                cursor: pointer;
+                font-size: 0.75rem;
+                color: var(--trace-text-muted);
+                user-select: none;
+              "
+                  >
+                    Show raw error
+                  </summary>
+                  <pre
+                    style="
+                margin: 0.5rem 0 0 0;
+                font-family: var(--trace-mono);
+                font-size: 0.75rem;
+                white-space: pre-wrap;
+                word-break: break-all;
+                color: var(--trace-text-muted);
+                background: var(--trace-bg);
+                padding: 0.75rem;
+                border-radius: var(--trace-radius-sm);
+              "
+                  >
+${errorContent.raw}</pre
+                  >
+                </details>
+              `
+            : nothing}
+        </div>
+      </div>
+    `;
+  }
+
   return html`
     <div class="modal-content-scroll">
-      ${isString ? html`
-        <div class="text-mono p-4 border rounded" style="background: var(--trace-bg)">${content}</div>
-      ` : html`
-        <div class="json-block p-4 border rounded" style="background: var(--trace-bg)">
-          ${renderJson(content)}
-        </div>
-      `}
+      ${isString
+        ? html`
+            <div
+              class="text-mono p-4 border rounded"
+              style="background: var(--trace-bg)"
+            >
+              ${content}
+            </div>
+          `
+        : html`
+            <div
+              class="json-block p-4 border rounded"
+              style="background: var(--trace-bg)"
+            >
+              ${renderJson(content)}
+            </div>
+          `}
     </div>
   `;
 }
 
 function renderModal(turn: Turn, phase: TurnPhase, onClose: () => void) {
   return html`
-    <div class="modal-overlay" @click=${(e: Event) => {
-      if ((e.target as HTMLElement).classList.contains("modal-overlay")) onClose();
-    }}>
+    <div
+      class="modal-overlay"
+      @click=${(e: Event) => {
+        if ((e.target as HTMLElement).classList.contains("modal-overlay"))
+          onClose();
+      }}
+    >
       <div class="modal">
         <header class="modal-header">
           <div class="modal-title">
             <span style="color: var(--trace-accent); display: flex;">
-              <div style="width: 24px; height: 24px;" .innerHTML=${phase.icon}></div>
+              <div
+                style="width: 24px; height: 24px;"
+                .innerHTML=${phase.icon}
+              ></div>
             </span>
-            ${phase.type === "context" ? `Context sent to model – ${turn.turnId}` : phase.label}
+            ${phase.type === "context"
+              ? `Context sent to model – ${turn.turnId}`
+              : phase.label}
           </div>
           <button class="modal-close" @click=${onClose}>
-            <div style="width: 24px; height: 24px;" .innerHTML=${ICONS.close}></div>
+            <div
+              style="width: 24px; height: 24px;"
+              .innerHTML=${ICONS.close}
+            ></div>
           </button>
         </header>
         <div class="modal-body">
-          ${phase.type === "context" 
-            ? renderContextModalContent(turn) 
+          ${phase.type === "context"
+            ? renderContextModalContent(turn)
             : renderGenericModalContent(phase)}
         </div>
       </div>
@@ -1205,36 +1680,82 @@ function renderModal(turn: Turn, phase: TurnPhase, onClose: () => void) {
 }
 
 function renderTurn(
-  turn: Turn, 
-  index: number, 
+  turn: Turn,
+  index: number,
   onPhaseClick: (phase: TurnPhase, turn: Turn) => void,
-  onExport: (turn: Turn) => void
+  onExport: (turn: Turn) => void,
 ) {
-  const visiblePhases = turn.phases.filter(p => p.visible);
+  const visiblePhases = turn.phases.filter((p) => p.visible);
 
   return html`
     <article class="turn-card">
       <div class="turn-header">
         <div style="display: flex; align-items: center; gap: 1rem;">
-          <div class="turn-badge" style="background: ${turn.isSystemInitiated ? '#f3e8ff' : '#eff6ff'}; color: ${turn.isSystemInitiated ? '#7e22ce' : '#1d4ed8'}">
+          <div
+            class="turn-badge"
+            style="background: ${turn.isSystemInitiated
+              ? "#f3e8ff"
+              : "#eff6ff"}; color: ${turn.isSystemInitiated
+              ? "#7e22ce"
+              : "#1d4ed8"}"
+          >
             ${turn.sourceLabel}
           </div>
           <span class="turn-badge">${turn.turnId}</span>
-          <span style="color: var(--trace-text-muted); font-size: 0.875rem;">${turn.timestamp}</span>
+          <span style="color: var(--trace-text-muted); font-size: 0.875rem;"
+            >${turn.timestamp}</span
+          >
         </div>
-        <div class="turn-meta" style="display: flex; align-items: center; gap: 1rem;">
+        <div
+          class="turn-meta"
+          style="display: flex; align-items: center; gap: 1rem;"
+        >
           <span>${turn.provider}/${turn.model}</span>
-          <span style="color: ${turn.status === 'error' ? 'var(--trace-error)' : 'var(--trace-success)'}">
-            ${turn.status === 'pending' ? 'Processing...' : `${turn.durationMs}ms`}
+          ${turn.usage
+            ? html`
+                <span
+                  style="font-size: 0.8rem; font-family: var(--trace-mono); color: var(--trace-text-muted);"
+                >
+                  <span style="color: var(--trace-accent);"
+                    >${formatTokenCount(turn.usage.input)}</span
+                  >
+                  <span title="Input tokens">IN</span>
+                  /
+                  <span style="color: var(--trace-success);"
+                    >${formatTokenCount(turn.usage.output)}</span
+                  >
+                  <span title="Output tokens">OUT</span>
+                </span>
+              `
+            : nothing}
+          <span
+            style="color: ${turn.status === "error"
+              ? "var(--trace-error)"
+              : "var(--trace-success)"}"
+          >
+            ${turn.status === "pending"
+              ? "Processing..."
+              : `${turn.durationMs}ms`}
           </span>
-          <button class="turn-export-btn" @click=${(e: Event) => { e.stopPropagation(); onExport(turn); }} title="Export this trace as JSON">
+          <button
+            class="turn-export-btn"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              onExport(turn);
+            }}
+            title="Export this trace as JSON"
+          >
             <span .innerHTML=${ICONS.download}></span>
             Export
           </button>
         </div>
       </div>
       <div class="phase-row">
-        ${visiblePhases.map((phase, i) => renderPhaseIcon(phase, i, visiblePhases.length, () => onPhaseClick(phase, turn)))}
+        ${visiblePhases.map((phase, i) =>
+          renderPhaseIcon(phase, i, visiblePhases.length, () =>
+            onPhaseClick(phase, turn),
+          ),
+        )}
       </div>
     </article>
   `;
@@ -1257,15 +1778,15 @@ export type LlmDebugProps = {
 };
 
 export function renderLlmDebug(props: LlmDebugProps) {
-  const turns = props.history.map((interaction, i) => 
-    interactionToTurn(interaction, props.history.length - 1 - i)
+  const turns = props.history.map((interaction, i) =>
+    interactionToTurn(interaction, props.history.length - 1 - i),
   );
 
   let selectedTurn: Turn | null = null;
   let selectedPhase: TurnPhase | null = null;
 
   if (props.modalTurnId && props.modalStep) {
-    selectedTurn = turns.find(t => t.id === props.modalTurnId) || null;
+    selectedTurn = turns.find((t) => t.id === props.modalTurnId) || null;
     selectedPhase = props.modalStep as TurnPhase;
   }
 
@@ -1306,31 +1827,53 @@ export function renderLlmDebug(props: LlmDebugProps) {
           <h1>LLM Conversation Turn Diagnostic</h1>
         </div>
         <div class="controls">
-          ${turns.length > 0 ? html`
-            <button @click=${handleExportAll}>
-              <span style="width: 16px; height: 16px;" .innerHTML=${ICONS.download}></span>
-              Export All
-            </button>
-          ` : nothing}
+          ${turns.length > 0
+            ? html`
+                <button @click=${handleExportAll}>
+                  <span
+                    style="width: 16px; height: 16px;"
+                    .innerHTML=${ICONS.download}
+                  ></span>
+                  Export All
+                </button>
+              `
+            : nothing}
           <button @click=${props.onClear}>
             <span style="width: 16px; height: 16px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                />
+              </svg>
             </span>
             Clear History
           </button>
         </div>
       </div>
 
-      ${turns.length === 0 ? html`
-        <div style="text-align: center; padding: 4rem; color: var(--trace-text-muted); border: 2px dashed var(--trace-card-border); border-radius: var(--trace-radius);">
-          No interactions recorded.
-        </div>
-      ` : html`
-        <div>
-          ${turns.map((turn, i) => renderTurn(turn, i, handlePhaseClick, handleExportTurn))}
-        </div>
-      `}
-      ${selectedTurn && selectedPhase ? renderModal(selectedTurn, selectedPhase, props.onCloseModal) : nothing}
+      ${turns.length === 0
+        ? html`
+            <div
+              style="text-align: center; padding: 4rem; color: var(--trace-text-muted); border: 2px dashed var(--trace-card-border); border-radius: var(--trace-radius);"
+            >
+              No interactions recorded.
+            </div>
+          `
+        : html`
+            <div>
+              ${turns.map((turn, i) =>
+                renderTurn(turn, i, handlePhaseClick, handleExportTurn),
+              )}
+            </div>
+          `}
+      ${selectedTurn && selectedPhase
+        ? renderModal(selectedTurn, selectedPhase, props.onCloseModal)
+        : nothing}
     </div>
   `;
 }

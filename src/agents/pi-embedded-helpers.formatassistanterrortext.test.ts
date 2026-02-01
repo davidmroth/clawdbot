@@ -24,8 +24,12 @@ describe("formatAssistantErrorText", () => {
     expect(formatAssistantErrorText(msg)).toContain("Context overflow");
   });
   it("returns a friendly message for Anthropic role ordering", () => {
-    const msg = makeAssistantError('messages: roles must alternate between "user" and "assistant"');
-    expect(formatAssistantErrorText(msg)).toContain("Message ordering conflict");
+    const msg = makeAssistantError(
+      'messages: roles must alternate between "user" and "assistant"',
+    );
+    expect(formatAssistantErrorText(msg)).toContain(
+      "Message ordering conflict",
+    );
   });
   it("returns a friendly message for Anthropic overload errors", () => {
     const msg = makeAssistantError(
@@ -36,7 +40,9 @@ describe("formatAssistantErrorText", () => {
     );
   });
   it("handles JSON-wrapped role errors", () => {
-    const msg = makeAssistantError('{"error":{"message":"400 Incorrect role information"}}');
+    const msg = makeAssistantError(
+      '{"error":{"message":"400 Incorrect role information"}}',
+    );
     const result = formatAssistantErrorText(msg);
     expect(result).toContain("Message ordering conflict");
     expect(result).not.toContain("400");
@@ -45,6 +51,19 @@ describe("formatAssistantErrorText", () => {
     const msg = makeAssistantError(
       '{"type":"error","error":{"message":"Something exploded","type":"server_error"}}',
     );
-    expect(formatAssistantErrorText(msg)).toBe("LLM error server_error: Something exploded");
+    expect(formatAssistantErrorText(msg)).toBe(
+      "LLM error server_error: Something exploded",
+    );
+  });
+  it("returns a helpful hint for Ollama thinking-not-supported errors", () => {
+    const msg = {
+      stopReason: "error",
+      errorMessage: '400 think value "low" is not supported for this model',
+      model: "qwen3:30b",
+    } as AssistantMessage;
+    const result = formatAssistantErrorText(msg);
+    expect(result).toContain("Thinking mode is not supported for qwen3:30b");
+    expect(result).toContain("agents.defaults.thinkingDefault");
+    expect(result).toContain('thinking: "off"');
   });
 });

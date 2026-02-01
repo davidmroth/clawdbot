@@ -1,7 +1,18 @@
 ---
 name: gmail
-description: Use when you need to control Gmail from Clawdbot via the gmail tool: send messages, read messages, search messages, etc.
-metadata: {"clawdbot":{"emoji":"✉️","env":["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"],"requires":{"bins":["python3"]}}}
+description: Use when you need to control Gmail from Clawdbot via the gmail tool to send messages, read messages, search messages, etc.
+metadata:
+  {
+    "clawdbot":
+      {
+        "emoji": "✉️",
+        "requires":
+          {
+            "env":
+              ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"],
+          },
+      },
+  }
 ---
 
 # Gmail Skill

@@ -48,6 +48,36 @@ export function isCompactionFailureError(errorMessage?: string): boolean {
   );
 }
 
+/**
+ * Detects errors where the LLM provider rejects thinking/reasoning mode.
+ * Common with Ollama local models that don't support the `think` parameter.
+ */
+export function isThinkingNotSupportedError(errorMessage?: string): boolean {
+  if (!errorMessage) return false;
+  // Ollama format: 'think value "low" is not supported for this model'
+  if (
+    /think(?:ing)?\s+(?:value\s+)?["']?\w+["']?\s+is\s+not\s+supported/i.test(
+      errorMessage,
+    )
+  ) {
+    return true;
+  }
+  // Generic patterns
+  if (
+    /think(?:ing)?.*not\s+supported.*(?:model|provider)/i.test(errorMessage)
+  ) {
+    return true;
+  }
+  if (
+    /(?:model|provider).*(?:does\s+not|doesn't)\s+support.*think/i.test(
+      errorMessage,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 const ERROR_PAYLOAD_PREFIX_RE =
   /^(?:error|api\s*error|apierror|openai\s*error|anthropic\s*error|gateway\s*error)[:\s-]+/i;
 const FINAL_TAG_RE = /<\s*\/?\s*final\s*>/gi;
@@ -112,10 +142,15 @@ function isLikelyHttpErrorText(raw: string): boolean {
 type ErrorPayload = Record<string, unknown>;
 
 function isErrorPayloadObject(payload: unknown): payload is ErrorPayload {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    return false;
   const record = payload as ErrorPayload;
   if (record.type === "error") return true;
-  if (typeof record.request_id === "string" || typeof record.requestId === "string") return true;
+  if (
+    typeof record.request_id === "string" ||
+    typeof record.requestId === "string"
+  )
+    return true;
   if ("error" in record) {
     const err = record.error;
     if (err && typeof err === "object" && !Array.isArray(err)) {
@@ -161,7 +196,9 @@ function stableStringify(value: unknown): string {
   }
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort();
-  const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`);
+  const entries = keys.map(
+    (key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`,
+  );
   return `{${entries.join(",")}}`;
 }
 
@@ -208,11 +245,16 @@ export function parseApiErrorInfo(raw?: string): ApiErrorInfo | null {
         : undefined;
 
   const topType = typeof payload.type === "string" ? payload.type : undefined;
-  const topMessage = typeof payload.message === "string" ? payload.message : undefined;
+  const topMessage =
+    typeof payload.message === "string" ? payload.message : undefined;
 
   let errType: string | undefined;
   let errMessage: string | undefined;
-  if (payload.error && typeof payload.error === "object" && !Array.isArray(payload.error)) {
+  if (
+    payload.error &&
+    typeof payload.error === "object" &&
+    !Array.isArray(payload.error)
+  ) {
     const err = payload.error as Record<string, unknown>;
     if (typeof err.type === "string") errType = err.type;
     if (typeof err.code === "string" && !errType) errType = err.code;
@@ -261,7 +303,9 @@ export function formatAssistantErrorText(
 
   const unknownTool =
     raw.match(/unknown tool[:\s]+["']?([a-z0-9_-]+)["']?/i) ??
-    raw.match(/tool\s+["']?([a-z0-9_-]+)["']?\s+(?:not found|is not available)/i);
+    raw.match(
+      /tool\s+["']?([a-z0-9_-]+)["']?\s+(?:not found|is not available)/i,
+    );
   if (unknownTool?.[1]) {
     const rewritten = formatSandboxToolPolicyBlockedMessage({
       cfg: opts?.cfg,
@@ -290,7 +334,9 @@ export function formatAssistantErrorText(
     );
   }
 
-  const invalidRequest = raw.match(/"type":"invalid_request_error".*?"message":"([^"]+)"/);
+  const invalidRequest = raw.match(
+    /"type":"invalid_request_error".*?"message":"([^"]+)"/,
+  );
   if (invalidRequest?.[1]) {
     return `LLM request rejected: ${invalidRequest[1]}`;
   }
@@ -299,13 +345,27 @@ export function formatAssistantErrorText(
     return "The AI service is temporarily overloaded. Please try again in a moment.";
   }
 
+  // Detect thinking/reasoning mode not supported by the model
+  if (isThinkingNotSupportedError(raw)) {
+    const model = msg.model ?? "this model";
+    return (
+      `Thinking mode is not supported for ${model}. ` +
+      `To disable thinking for this model, add to your config:\n\n` +
+      `agents:\n  defaults:\n    models:\n      "provider/${model}":\n        params:\n          thinking: "off"\n\n` +
+      `Or set a global default: agents.defaults.thinkingDefault: "off"`
+    );
+  }
+
   if (isLikelyHttpErrorText(raw) || isRawApiErrorPayload(raw)) {
     return formatRawAssistantErrorForUi(raw);
   }
 
   // Never return raw unhandled errors - log for debugging but return safe message
   if (raw.length > 600) {
-    console.warn("[formatAssistantErrorText] Long error truncated:", raw.slice(0, 200));
+    console.warn(
+      "[formatAssistantErrorText] Long error truncated:",
+      raw.slice(0, 200),
+    );
   }
   return raw.length > 600 ? `${raw.slice(0, 600)}…` : raw;
 }
@@ -347,7 +407,9 @@ export function sanitizeUserFacingText(text: string): string {
   return collapseConsecutiveDuplicateBlocks(stripped);
 }
 
-export function isRateLimitAssistantError(msg: AssistantMessage | undefined): boolean {
+export function isRateLimitAssistantError(
+  msg: AssistantMessage | undefined,
+): boolean {
   if (!msg || msg.stopReason !== "error") return false;
   return isRateLimitErrorMessage(msg.errorMessage ?? "");
 }
@@ -363,8 +425,16 @@ const ERROR_PATTERNS = {
     "resource_exhausted",
     "usage limit",
   ],
-  overloaded: [/overloaded_error|"type"\s*:\s*"overloaded_error"/i, "overloaded"],
-  timeout: ["timeout", "timed out", "deadline exceeded", "context deadline exceeded"],
+  overloaded: [
+    /overloaded_error|"type"\s*:\s*"overloaded_error"/i,
+    "overloaded",
+  ],
+  timeout: [
+    "timeout",
+    "timed out",
+    "deadline exceeded",
+    "context deadline exceeded",
+  ],
   billing: [
     /\b402\b/,
     "payment required",
@@ -402,7 +472,10 @@ const IMAGE_DIMENSION_ERROR_RE =
   /image dimensions exceed max allowed size for many-image requests:\s*(\d+)\s*pixels/i;
 const IMAGE_DIMENSION_PATH_RE = /messages\.(\d+)\.content\.(\d+)\.image/i;
 
-function matchesErrorPatterns(raw: string, patterns: readonly ErrorPattern[]): boolean {
+function matchesErrorPatterns(
+  raw: string,
+  patterns: readonly ErrorPattern[],
+): boolean {
   if (!raw) return false;
   const value = raw.toLowerCase();
   return patterns.some((pattern) =>
@@ -431,7 +504,9 @@ export function isBillingErrorMessage(raw: string): boolean {
   );
 }
 
-export function isBillingAssistantError(msg: AssistantMessage | undefined): boolean {
+export function isBillingAssistantError(
+  msg: AssistantMessage | undefined,
+): boolean {
   if (!msg || msg.stopReason !== "error") return false;
   return isBillingErrorMessage(msg.errorMessage ?? "");
 }
@@ -456,9 +531,15 @@ export function parseImageDimensionError(raw: string): {
   const limitMatch = raw.match(IMAGE_DIMENSION_ERROR_RE);
   const pathMatch = raw.match(IMAGE_DIMENSION_PATH_RE);
   return {
-    maxDimensionPx: limitMatch?.[1] ? Number.parseInt(limitMatch[1], 10) : undefined,
-    messageIndex: pathMatch?.[1] ? Number.parseInt(pathMatch[1], 10) : undefined,
-    contentIndex: pathMatch?.[2] ? Number.parseInt(pathMatch[2], 10) : undefined,
+    maxDimensionPx: limitMatch?.[1]
+      ? Number.parseInt(limitMatch[1], 10)
+      : undefined,
+    messageIndex: pathMatch?.[1]
+      ? Number.parseInt(pathMatch[1], 10)
+      : undefined,
+    contentIndex: pathMatch?.[2]
+      ? Number.parseInt(pathMatch[2], 10)
+      : undefined,
     raw,
   };
 }
@@ -468,10 +549,15 @@ export function isImageDimensionErrorMessage(raw: string): boolean {
 }
 
 export function isCloudCodeAssistFormatError(raw: string): boolean {
-  return !isImageDimensionErrorMessage(raw) && matchesErrorPatterns(raw, ERROR_PATTERNS.format);
+  return (
+    !isImageDimensionErrorMessage(raw) &&
+    matchesErrorPatterns(raw, ERROR_PATTERNS.format)
+  );
 }
 
-export function isAuthAssistantError(msg: AssistantMessage | undefined): boolean {
+export function isAuthAssistantError(
+  msg: AssistantMessage | undefined,
+): boolean {
   if (!msg || msg.stopReason !== "error") return false;
   return isAuthErrorMessage(msg.errorMessage ?? "");
 }
@@ -491,7 +577,9 @@ export function isFailoverErrorMessage(raw: string): boolean {
   return classifyFailoverReason(raw) !== null;
 }
 
-export function isFailoverAssistantError(msg: AssistantMessage | undefined): boolean {
+export function isFailoverAssistantError(
+  msg: AssistantMessage | undefined,
+): boolean {
   if (!msg || msg.stopReason !== "error") return false;
   return isFailoverErrorMessage(msg.errorMessage ?? "");
 }
