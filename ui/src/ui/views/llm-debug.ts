@@ -304,11 +304,17 @@ function interactionToTurn(interaction: LlmInteraction, index: number): Turn {
   });
 
   // 4. Tools - now using actual tool calls from aggregated LlmInteraction
+  // #region agent log
+  console.log('[DEBUG H3] extracting tool calls:', {runId:interaction.runId,interactionToolCallsCount:interaction.toolCalls?.length||0,interactionToolCalls:interaction.toolCalls,runScopedMsgCount:runScopedMessages.length,status:interaction.status});
+  // #endregion
   const toolCalls = dedupeToolCalls([
     ...(interaction.toolCalls || []),
     ...extractToolCallsFromMessages(runScopedMessages),
   ]);
   const hasToolCalls = toolCalls.length > 0;
+  // #region agent log
+  console.log('[DEBUG H3-H4] tool calls after dedupe:', {runId:interaction.runId,toolCallsCount:toolCalls.length,hasToolCalls,visible:hasToolCalls,toolCalls});
+  // #endregion
   phases.push({
     type: "tools",
     icon: ICONS.tools,
@@ -1115,9 +1121,16 @@ export type LlmDebugProps = {
 };
 
 export function renderLlmDebug(props: LlmDebugProps) {
-  const turns = props.history.map((interaction, i) => 
-    interactionToTurn(interaction, props.history.length - 1 - i)
-  );
+  const turns = props.history.map((interaction, i) => {
+    try {
+      return interactionToTurn(interaction, props.history.length - 1 - i);
+    } catch (err) {
+      // #region agent log
+      console.error('[DEBUG H5] interactionToTurn error:', {error:String(err),status:interaction.status,runId:interaction.runId});
+      // #endregion
+      throw err;
+    }
+  });
 
   let selectedTurn: Turn | null = null;
   let selectedPhase: TurnPhase | null = null;
@@ -1162,7 +1175,6 @@ export function renderLlmDebug(props: LlmDebugProps) {
       <div class="header">
         <div class="title">
           <h1>LLM Conversation Turn Diagnostic</h1>
-          <div class="subtitle">Variant A Edition</div>
         </div>
         <div class="controls">
           ${turns.length > 0 ? html`

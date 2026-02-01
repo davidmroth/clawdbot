@@ -120,6 +120,9 @@ export function createLlmDebugLogger(params: {
                 }
               }
 
+              // #region agent log
+              console.log('[DEBUG H1] llm-debug-logger emitting llm-res:', JSON.stringify({runId:params.runId,hasToolCalls,toolCallsCount:toolCalls.length,toolCalls:toolCalls.slice(0,3),isToolCallOnly}));
+              // #endregion
               // 3. Emit Response Event on stream completion/error
               emitAgentEvent({
                 runId: params.runId,
