@@ -1,5 +1,5 @@
 import { createReplyReferencePlanner } from "../../auto-reply/reply/reply-reference.js";
-import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
+import { stripDirectiveTags } from "../../utils/directive-tags.js";
 import {
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
@@ -26,8 +26,7 @@ export async function deliverReplies(params: {
     const mediaList =
       payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
     // Sanitize text by stripping any remaining directive tags (e.g., [[reply_to:...]])
-    const parsed = parseReplyDirectives(payload.text ?? "");
-    const text = parsed.text;
+    const text = stripDirectiveTags(payload.text ?? "");
 
     if (mediaList.length === 0) {
       const trimmed = text.trim();

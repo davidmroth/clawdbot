@@ -3,6 +3,7 @@ import {
   type AgentEventPayload,
   getAgentRunContext,
 } from "../infra/agent-events.js";
+import { stripDirectiveTags } from "../utils/directive-tags.js";
 import { loadSessionEntry } from "./session-utils.js";
 import { formatForLog } from "./ws-log.js";
 
@@ -151,6 +152,7 @@ export function createAgentEventHandler({
     const last = chatRunState.deltaSentAt.get(clientRunId) ?? 0;
     if (now - last < 150) return;
     chatRunState.deltaSentAt.set(clientRunId, now);
+    const sanitizedText = stripDirectiveTags(text);
     const payload = {
       runId: clientRunId,
       sessionKey,
@@ -158,7 +160,7 @@ export function createAgentEventHandler({
       state: "delta" as const,
       message: {
         role: "assistant",
-        content: [{ type: "text", text }],
+        content: [{ type: "text", text: sanitizedText }],
         timestamp: now,
       },
     };
@@ -173,7 +175,8 @@ export function createAgentEventHandler({
     jobState: "done" | "error",
     error?: unknown,
   ) => {
-    const text = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
+    const rawText = chatRunState.buffers.get(clientRunId)?.trim() ?? "";
+    const text = stripDirectiveTags(rawText);
     chatRunState.buffers.delete(clientRunId);
     chatRunState.deltaSentAt.delete(clientRunId);
     if (jobState === "done") {

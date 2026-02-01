@@ -8,7 +8,7 @@ import {
   chunkMarkdownTextWithMode,
   type ChunkMode,
 } from "../../auto-reply/chunk.js";
-import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
+import { stripDirectiveTags } from "../../utils/directive-tags.js";
 import { splitTelegramCaption } from "../caption.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
 import type { ReplyToMode } from "../../config/config.js";
@@ -105,8 +105,7 @@ export async function deliverReplies(params: {
         ? [reply.mediaUrl]
         : [];
     // Sanitize text by stripping any remaining directive tags (e.g., [[reply_to:...]])
-    const parsed = parseReplyDirectives(reply.text || "");
-    const replyText = parsed.text;
+    const replyText = stripDirectiveTags(reply.text || "");
     if (mediaList.length === 0) {
       const chunks = chunkText(replyText);
       for (const chunk of chunks) {

@@ -7,8 +7,8 @@ import {
   DEFAULT_GROUP_HISTORY_LIMIT,
   type HistoryEntry,
 } from "../auto-reply/reply/history.js";
-import { parseReplyDirectives } from "../auto-reply/reply/reply-directives.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
+import { stripDirectiveTags } from "../utils/directive-tags.js";
 import type { ClawdbotConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import type { SignalReactionNotificationMode } from "../config/types.js";
@@ -254,8 +254,7 @@ async function deliverReplies(params: {
     const mediaList =
       payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
     // Sanitize text by stripping any remaining directive tags (e.g., [[reply_to:...]])
-    const parsed = parseReplyDirectives(payload.text ?? "");
-    const text = parsed.text;
+    const text = stripDirectiveTags(payload.text ?? "");
     if (!text && mediaList.length === 0) continue;
     if (mediaList.length === 0) {
       for (const chunk of chunkTextWithMode(text, textLimit, chunkMode)) {

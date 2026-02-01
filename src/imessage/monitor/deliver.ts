@@ -1,5 +1,5 @@
 import { chunkTextWithMode, resolveChunkMode } from "../../auto-reply/chunk.js";
-import { parseReplyDirectives } from "../../auto-reply/reply/reply-directives.js";
+import { stripDirectiveTags } from "../../utils/directive-tags.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMarkdownTableMode } from "../../config/markdown-tables.js";
 import { convertMarkdownTables } from "../../markdown/tables.js";
@@ -30,8 +30,7 @@ export async function deliverReplies(params: {
     const mediaList =
       payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
     // Sanitize text by stripping any remaining directive tags (e.g., [[reply_to:...]])
-    const parsed = parseReplyDirectives(payload.text ?? "");
-    const rawText = parsed.text;
+    const rawText = stripDirectiveTags(payload.text ?? "");
     const text = convertMarkdownTables(rawText, tableMode);
     if (!text && mediaList.length === 0) continue;
     if (mediaList.length === 0) {

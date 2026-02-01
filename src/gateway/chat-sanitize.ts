@@ -1,3 +1,5 @@
+import { stripDirectiveTags } from "../utils/directive-tags.js";
+
 const ENVELOPE_PREFIX = /^\[([^\]]+)\]\s*/;
 const ENVELOPE_CHANNELS = [
   "WebChat",
@@ -38,7 +40,10 @@ function stripMessageIdHints(text: string): string {
   return filtered.length === lines.length ? text : filtered.join("\n");
 }
 
-function stripEnvelopeFromContent(content: unknown[]): { content: unknown[]; changed: boolean } {
+function stripEnvelopeFromContent(content: unknown[]): {
+  content: unknown[];
+  changed: boolean;
+} {
   let changed = false;
   const next = content.map((item) => {
     if (!item || typeof item !== "object") return item;
@@ -59,6 +64,13 @@ export function stripEnvelopeFromMessage(message: unknown): unknown {
   if (!message || typeof message !== "object") return message;
   const entry = message as Record<string, unknown>;
   const role = typeof entry.role === "string" ? entry.role.toLowerCase() : "";
+
+  // Handle assistant messages - strip directive tags
+  if (role === "assistant") {
+    return stripDirectiveTagsFromMessage(entry);
+  }
+
+  // Handle user messages - strip envelope prefixes
   if (role !== "user") return message;
 
   let changed = false;
@@ -85,6 +97,56 @@ export function stripEnvelopeFromMessage(message: unknown): unknown {
   }
 
   return changed ? next : message;
+}
+
+function stripDirectiveTagsFromMessage(
+  entry: Record<string, unknown>,
+): unknown {
+  let changed = false;
+  const next: Record<string, unknown> = { ...entry };
+
+  if (typeof entry.content === "string") {
+    const stripped = stripDirectiveTags(entry.content);
+    if (stripped !== entry.content) {
+      next.content = stripped;
+      changed = true;
+    }
+  } else if (Array.isArray(entry.content)) {
+    const updated = stripDirectiveTagsFromContent(entry.content);
+    if (updated.changed) {
+      next.content = updated.content;
+      changed = true;
+    }
+  } else if (typeof entry.text === "string") {
+    const stripped = stripDirectiveTags(entry.text);
+    if (stripped !== entry.text) {
+      next.text = stripped;
+      changed = true;
+    }
+  }
+
+  return changed ? next : entry;
+}
+
+function stripDirectiveTagsFromContent(content: unknown[]): {
+  content: unknown[];
+  changed: boolean;
+} {
+  let changed = false;
+  const next = content.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    const itemEntry = item as Record<string, unknown>;
+    if (itemEntry.type !== "text" || typeof itemEntry.text !== "string")
+      return item;
+    const stripped = stripDirectiveTags(itemEntry.text);
+    if (stripped === itemEntry.text) return item;
+    changed = true;
+    return {
+      ...itemEntry,
+      text: stripped,
+    };
+  });
+  return { content: next, changed };
 }
 
 export function stripEnvelopeFromMessages(messages: unknown[]): unknown[] {
