@@ -58,7 +58,9 @@ export async function runCommandWithTimeout(
   optionsOrTimeout: number | CommandOptions,
 ): Promise<SpawnResult> {
   const options: CommandOptions =
-    typeof optionsOrTimeout === "number" ? { timeoutMs: optionsOrTimeout } : optionsOrTimeout;
+    typeof optionsOrTimeout === "number"
+      ? { timeoutMs: optionsOrTimeout }
+      : optionsOrTimeout;
   const { timeoutMs, cwd, input, env } = options;
   const { windowsVerbatimArguments } = options;
   const hasInput = input !== undefined;
@@ -74,9 +76,12 @@ export async function runCommandWithTimeout(
   })();
 
   const resolvedEnv = env ? { ...process.env, ...env } : { ...process.env };
+
   if (shouldSuppressNpmFund) {
-    if (resolvedEnv.NPM_CONFIG_FUND == null) resolvedEnv.NPM_CONFIG_FUND = "false";
-    if (resolvedEnv.npm_config_fund == null) resolvedEnv.npm_config_fund = "false";
+    if (resolvedEnv.NPM_CONFIG_FUND == null)
+      resolvedEnv.NPM_CONFIG_FUND = "false";
+    if (resolvedEnv.npm_config_fund == null)
+      resolvedEnv.npm_config_fund = "false";
   }
 
   const stdio = resolveCommandStdio({ hasInput, preferInherit: true });

@@ -39,7 +39,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=America/Chicago
 ENV CLAWDBOT_PYTHON_VENV="/home/node/.python-env"
-ENV PATH="${CLAWDBOT_PYTHON_VENV}/bin:${PATH}"
 
 # install pip
 RUN apt-get update && \
@@ -64,6 +63,10 @@ RUN chown -R node:node ./dist
 RUN npm install -g pnpm
 RUN echo "#!/bin/bash\n/usr/local/bin/node /app/dist/index.js \$@" > /usr/local/bin/clawdbot
 RUN chmod +x /usr/local/bin/clawdbot
+
+# Install clawdbot-bash wrapper that ensures Python venv is first in PATH
+COPY scripts/clawdbot-bash.sh /usr/local/bin/clawdbot-bash
+RUN chmod +x /usr/local/bin/clawdbot-bash
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)

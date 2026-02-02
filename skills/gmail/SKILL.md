@@ -21,7 +21,7 @@ CLI tool for Gmail via Official Google API (Python).
 
 ## Setup
 
-Set the following environment variables in your Docker Compose or `.env` file:
+The following environment variables are required and should be set in your environment:
 
 - `GMAIL_CLIENT_ID`: Your OAuth Client ID
 - `GMAIL_CLIENT_SECRET`: Your OAuth Client Secret
@@ -31,10 +31,10 @@ The skill relies exclusively on these environment variables for authentication.
 
 ## Usage
 
-This skill is a single Python script (`gmail.py`) using `google-api-python-client`.
+This skill is a single Python script (`gmail.py`) using `google-api-python-client` installed in the Clawdbot Python environment (`${CLAWDBOT_PYTHON_VENV}`).
 
 ```bash
-python3 skills/gmail/gmail.py <command> [args]
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py <command> [args]
 ```
 
 **Commands:**
@@ -49,26 +49,18 @@ python3 skills/gmail/gmail.py <command> [args]
 
 ```bash
 # List unread
-python3 skills/gmail/gmail.py unread
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py unread
 
 # Search
-python3 skills/gmail/gmail.py search --limit 5 "subject:invoice"
-python3 skills/gmail/gmail.py search "from:amazon newer:2d" --limit 20
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py search --limit 5 "subject:invoice"
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py search "from:amazon newer:2d" --limit 20
 
 # Read
-python3 skills/gmail/gmail.py read 193b218a...
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py read 193b218a...
 
 # Send
-python3 skills/gmail/gmail.py send recipient@example.com "Subject Here" "Body content goes here"
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py send recipient@example.com "Subject Here" "Body content goes here"
 
 # Scrape amounts
-python3 skills/gmail/gmail.py
-```
-
-## Docker Usage
-
-To run inside the Docker container:
-
-```bash
-docker compose exec clawdbot-gateway python3 /app/skills/gmail/gmail.py unread
+${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py
 ```

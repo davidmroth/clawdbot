@@ -30,6 +30,12 @@ export function getShellConfig(): { shell: string; args: string[] } {
     };
   }
 
+  // Prefer clawdbot-bash wrapper
+  const clawdbotBash = "/usr/local/bin/clawdbot-bash";
+  if (fs.existsSync(clawdbotBash)) {
+    return { shell: clawdbotBash, args: ["-c"] };
+  }
+
   const envShell = process.env.SHELL?.trim();
   const shellName = envShell ? path.basename(envShell) : "";
   // Fish rejects common bashisms used by tools, so prefer bash when detected.
