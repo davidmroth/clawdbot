@@ -1,5 +1,12 @@
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
 import type { Command } from "commander";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
 import {
   buildWorkspaceSkillStatus,
   type SkillStatusEntry,
@@ -25,6 +32,11 @@ export type SkillInfoOptions = {
 
 export type SkillsCheckOptions = {
   json?: boolean;
+};
+
+export type SkillInstallOptions = {
+  json?: boolean;
+  dryRun?: boolean;
 };
 
 function appendClawdHubHint(output: string, json?: boolean): string {
@@ -67,8 +79,13 @@ function formatSkillMissingSummary(skill: SkillStatusEntry): string {
 /**
  * Format the skills list output
  */
-export function formatSkillsList(report: SkillStatusReport, opts: SkillsListOptions): string {
-  const skills = opts.eligible ? report.skills.filter((s) => s.eligible) : report.skills;
+export function formatSkillsList(
+  report: SkillStatusReport,
+  opts: SkillsListOptions,
+): string {
+  const skills = opts.eligible
+    ? report.skills.filter((s) => s.eligible)
+    : report.skills;
 
   if (opts.json) {
     const jsonReport = {
@@ -117,7 +134,12 @@ export function formatSkillsList(report: SkillStatusReport, opts: SkillsListOpti
     { key: "Source", header: "Source", minWidth: 10 },
   ];
   if (opts.verbose) {
-    columns.push({ key: "Missing", header: "Missing", minWidth: 18, flex: true });
+    columns.push({
+      key: "Missing",
+      header: "Missing",
+      minWidth: 18,
+      flex: true,
+    });
   }
 
   const lines: string[] = [];
@@ -143,7 +165,9 @@ export function formatSkillInfo(
   skillName: string,
   opts: SkillInfoOptions,
 ): string {
-  const skill = report.skills.find((s) => s.name === skillName || s.skillKey === skillName);
+  const skill = report.skills.find(
+    (s) => s.name === skillName || s.skillKey === skillName,
+  );
 
   if (!skill) {
     if (opts.json) {
@@ -209,7 +233,9 @@ export function formatSkillInfo(
         const missing = anyBinsMissing;
         return missing ? theme.error(`✗ ${bin}`) : theme.success(`✓ ${bin}`);
       });
-      lines.push(`${theme.muted("  Any binaries:")} ${anyBinsStatus.join(", ")}`);
+      lines.push(
+        `${theme.muted("  Any binaries:")} ${anyBinsStatus.join(", ")}`,
+      );
     }
     if (skill.requirements.env.length > 0) {
       const envStatus = skill.requirements.env.map((env) => {
@@ -228,7 +254,9 @@ export function formatSkillInfo(
     if (skill.requirements.os.length > 0) {
       const osStatus = skill.requirements.os.map((osName) => {
         const missing = skill.missing.os.includes(osName);
-        return missing ? theme.error(`✗ ${osName}`) : theme.success(`✓ ${osName}`);
+        return missing
+          ? theme.error(`✗ ${osName}`)
+          : theme.success(`✓ ${osName}`);
       });
       lines.push(`${theme.muted("  OS:")} ${osStatus.join(", ")}`);
     }
@@ -249,10 +277,15 @@ export function formatSkillInfo(
 /**
  * Format a check/summary of all skills status
  */
-export function formatSkillsCheck(report: SkillStatusReport, opts: SkillsCheckOptions): string {
+export function formatSkillsCheck(
+  report: SkillStatusReport,
+  opts: SkillsCheckOptions,
+): string {
   const eligible = report.skills.filter((s) => s.eligible);
   const disabled = report.skills.filter((s) => s.disabled);
-  const blocked = report.skills.filter((s) => s.blockedByAllowlist && !s.disabled);
+  const blocked = report.skills.filter(
+    (s) => s.blockedByAllowlist && !s.disabled,
+  );
   const missingReqs = report.skills.filter(
     (s) => !s.eligible && !s.disabled && !s.blockedByAllowlist,
   );
@@ -285,10 +318,18 @@ export function formatSkillsCheck(report: SkillStatusReport, opts: SkillsCheckOp
   lines.push(theme.heading("Skills Status Check"));
   lines.push("");
   lines.push(`${theme.muted("Total:")} ${report.skills.length}`);
-  lines.push(`${theme.success("✓")} ${theme.muted("Eligible:")} ${eligible.length}`);
-  lines.push(`${theme.warn("⏸")} ${theme.muted("Disabled:")} ${disabled.length}`);
-  lines.push(`${theme.warn("🚫")} ${theme.muted("Blocked by allowlist:")} ${blocked.length}`);
-  lines.push(`${theme.error("✗")} ${theme.muted("Missing requirements:")} ${missingReqs.length}`);
+  lines.push(
+    `${theme.success("✓")} ${theme.muted("Eligible:")} ${eligible.length}`,
+  );
+  lines.push(
+    `${theme.warn("⏸")} ${theme.muted("Disabled:")} ${disabled.length}`,
+  );
+  lines.push(
+    `${theme.warn("🚫")} ${theme.muted("Blocked by allowlist:")} ${blocked.length}`,
+  );
+  lines.push(
+    `${theme.error("✗")} ${theme.muted("Missing requirements:")} ${missingReqs.length}`,
+  );
 
   if (eligible.length > 0) {
     lines.push("");
@@ -320,7 +361,9 @@ export function formatSkillsCheck(report: SkillStatusReport, opts: SkillsCheckOp
       if (skill.missing.os.length > 0) {
         missing.push(`os: ${skill.missing.os.join(", ")}`);
       }
-      lines.push(`  ${emoji} ${skill.name} ${theme.muted(`(${missing.join("; ")})`)}`);
+      lines.push(
+        `  ${emoji} ${skill.name} ${theme.muted(`(${missing.join("; ")})`)}`,
+      );
     }
   }
 
@@ -345,11 +388,18 @@ export function registerSkillsCli(program: Command) {
     .description("List all available skills")
     .option("--json", "Output as JSON", false)
     .option("--eligible", "Show only eligible (ready to use) skills", false)
-    .option("-v, --verbose", "Show more details including missing requirements", false)
+    .option(
+      "-v, --verbose",
+      "Show more details including missing requirements",
+      false,
+    )
     .action(async (opts) => {
       try {
         const config = loadConfig();
-        const workspaceDir = resolveAgentWorkspaceDir(config, resolveDefaultAgentId(config));
+        const workspaceDir = resolveAgentWorkspaceDir(
+          config,
+          resolveDefaultAgentId(config),
+        );
         const report = buildWorkspaceSkillStatus(workspaceDir, { config });
         defaultRuntime.log(formatSkillsList(report, opts));
       } catch (err) {
@@ -366,7 +416,10 @@ export function registerSkillsCli(program: Command) {
     .action(async (name, opts) => {
       try {
         const config = loadConfig();
-        const workspaceDir = resolveAgentWorkspaceDir(config, resolveDefaultAgentId(config));
+        const workspaceDir = resolveAgentWorkspaceDir(
+          config,
+          resolveDefaultAgentId(config),
+        );
         const report = buildWorkspaceSkillStatus(workspaceDir, { config });
         defaultRuntime.log(formatSkillInfo(report, name, opts));
       } catch (err) {
@@ -382,7 +435,10 @@ export function registerSkillsCli(program: Command) {
     .action(async (opts) => {
       try {
         const config = loadConfig();
-        const workspaceDir = resolveAgentWorkspaceDir(config, resolveDefaultAgentId(config));
+        const workspaceDir = resolveAgentWorkspaceDir(
+          config,
+          resolveDefaultAgentId(config),
+        );
         const report = buildWorkspaceSkillStatus(workspaceDir, { config });
         defaultRuntime.log(formatSkillsCheck(report, opts));
       } catch (err) {
@@ -391,11 +447,228 @@ export function registerSkillsCli(program: Command) {
       }
     });
 
+  skills
+    .command("install")
+    .description(
+      "Install dependencies for a skill by running its install.sh script",
+    )
+    .argument("<name>", "Skill name")
+    .option("--json", "Output as JSON", false)
+    .option("--dry-run", "Show what would be run without executing", false)
+    .action(async (name: string, opts: SkillInstallOptions) => {
+      try {
+        const config = loadConfig();
+        const workspaceDir = resolveAgentWorkspaceDir(
+          config,
+          resolveDefaultAgentId(config),
+        );
+        const report = buildWorkspaceSkillStatus(workspaceDir, { config });
+        const skill = report.skills.find(
+          (s) => s.name === name || s.skillKey === name,
+        );
+
+        if (!skill) {
+          const message = `Skill "${name}" not found. Run \`${formatCliCommand("clawdbot skills list")}\` to see available skills.`;
+          if (opts.json) {
+            defaultRuntime.log(
+              JSON.stringify({ error: "not found", skill: name }, null, 2),
+            );
+          } else {
+            defaultRuntime.error(message);
+          }
+          defaultRuntime.exit(1);
+          return;
+        }
+
+        const installScriptPath = path.join(skill.baseDir, "install.sh");
+        const installScriptExists = fs.existsSync(installScriptPath);
+
+        if (!installScriptExists) {
+          const message = `Skill "${skill.name}" does not have an install.sh script.`;
+          if (opts.json) {
+            defaultRuntime.log(
+              JSON.stringify(
+                {
+                  error: "no install script",
+                  skill: skill.name,
+                  path: installScriptPath,
+                },
+                null,
+                2,
+              ),
+            );
+          } else {
+            defaultRuntime.error(message);
+            defaultRuntime.log(
+              theme.muted(
+                `Expected install script at: ${shortenHomePath(installScriptPath)}`,
+              ),
+            );
+          }
+          defaultRuntime.exit(1);
+          return;
+        }
+
+        if (opts.dryRun) {
+          if (opts.json) {
+            defaultRuntime.log(
+              JSON.stringify(
+                {
+                  dryRun: true,
+                  skill: skill.name,
+                  script: installScriptPath,
+                  workdir: skill.baseDir,
+                },
+                null,
+                2,
+              ),
+            );
+          } else {
+            defaultRuntime.log(
+              theme.heading(`Dry run: would install "${skill.name}"`),
+            );
+            defaultRuntime.log(
+              `${theme.muted("Script:")} ${shortenHomePath(installScriptPath)}`,
+            );
+            defaultRuntime.log(
+              `${theme.muted("Working directory:")} ${shortenHomePath(skill.baseDir)}`,
+            );
+          }
+          return;
+        }
+
+        // Run the install script
+        if (!opts.json) {
+          const emoji = skill.emoji ?? "📦";
+          defaultRuntime.log(
+            `${emoji} Installing dependencies for ${theme.command(skill.name)}...`,
+          );
+          defaultRuntime.log(
+            theme.muted(`Running: ${shortenHomePath(installScriptPath)}`),
+          );
+          defaultRuntime.log("");
+        }
+
+        // Build environment with correct PATH ordering
+        // Ensure Python venv is at the front of PATH if it exists
+        const pythonVenv = process.env.CLAWDBOT_PYTHON_VENV;
+        const pythonVenvBin = pythonVenv ? path.join(pythonVenv, "bin") : null;
+        let envPath = process.env.PATH ?? "";
+
+        // Auto-create Python venv if it doesn't exist
+        if (pythonVenv && !fs.existsSync(pythonVenv)) {
+          if (!opts.json) {
+            defaultRuntime.log(
+              theme.muted(
+                `Creating Python venv at ${shortenHomePath(pythonVenv)}...`,
+              ),
+            );
+          }
+          const venvResult = spawn("python3", ["-m", "venv", pythonVenv], {
+            stdio: opts.json ? "pipe" : "inherit",
+          });
+          const venvExitCode = await new Promise<number>((resolve) => {
+            venvResult.on("close", (code) => resolve(code ?? 0));
+          });
+          if (venvExitCode !== 0) {
+            defaultRuntime.error(
+              `Failed to create Python venv (exit code ${venvExitCode})`,
+            );
+            defaultRuntime.exit(venvExitCode);
+            return;
+          }
+          // Upgrade pip in the new venv
+          const pipUpgrade = spawn(
+            path.join(pythonVenv, "bin", "pip"),
+            ["install", "--upgrade", "pip"],
+            { stdio: opts.json ? "pipe" : "inherit" },
+          );
+          await new Promise<void>((resolve) => {
+            pipUpgrade.on("close", () => resolve());
+          });
+          if (!opts.json) {
+            defaultRuntime.log(theme.success(`✓ Python venv created`));
+            defaultRuntime.log("");
+          }
+        }
+
+        if (
+          pythonVenvBin &&
+          fs.existsSync(pythonVenvBin) &&
+          !envPath.startsWith(pythonVenvBin)
+        ) {
+          envPath = `${pythonVenvBin}:${envPath}`;
+        }
+
+        const child = spawn("bash", [installScriptPath], {
+          cwd: skill.baseDir,
+          stdio: opts.json ? "pipe" : "inherit",
+          env: { ...process.env, PATH: envPath },
+        });
+
+        const output: string[] = [];
+        if (opts.json) {
+          child.stdout?.on("data", (data: Buffer) =>
+            output.push(data.toString()),
+          );
+          child.stderr?.on("data", (data: Buffer) =>
+            output.push(data.toString()),
+          );
+        }
+
+        const exitCode = await new Promise<number>((resolve) => {
+          child.on("close", (code) => resolve(code ?? 0));
+        });
+
+        if (opts.json) {
+          defaultRuntime.log(
+            JSON.stringify(
+              {
+                success: exitCode === 0,
+                skill: skill.name,
+                exitCode,
+                output: output.join(""),
+              },
+              null,
+              2,
+            ),
+          );
+        } else {
+          defaultRuntime.log("");
+          if (exitCode === 0) {
+            defaultRuntime.log(
+              theme.success(
+                `✓ Successfully installed dependencies for "${skill.name}"`,
+              ),
+            );
+          } else {
+            defaultRuntime.error(
+              `✗ Installation failed with exit code ${exitCode}`,
+            );
+          }
+        }
+
+        if (exitCode !== 0) {
+          defaultRuntime.exit(exitCode);
+        }
+      } catch (err) {
+        if (opts.json) {
+          defaultRuntime.log(JSON.stringify({ error: String(err) }, null, 2));
+        } else {
+          defaultRuntime.error(String(err));
+        }
+        defaultRuntime.exit(1);
+      }
+    });
+
   // Default action (no subcommand) - show list
   skills.action(async () => {
     try {
       const config = loadConfig();
-      const workspaceDir = resolveAgentWorkspaceDir(config, resolveDefaultAgentId(config));
+      const workspaceDir = resolveAgentWorkspaceDir(
+        config,
+        resolveDefaultAgentId(config),
+      );
       const report = buildWorkspaceSkillStatus(workspaceDir, { config });
       defaultRuntime.log(formatSkillsList(report, {}));
     } catch (err) {

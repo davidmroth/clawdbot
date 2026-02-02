@@ -38,6 +38,17 @@ FROM node:22-bookworm AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TZ=America/Chicago
+ENV CLAWDBOT_PYTHON_VENV="/home/node/.python-env"
+ENV PATH="${CLAWDBOT_PYTHON_VENV}/bin:${PATH}"
+
+# install pip
+RUN apt-get update && \
+    apt-get install -y python3-pip python3.11-venv && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+RUN python3 -m venv ${CLAWDBOT_PYTHON_VENV}
+RUN ${CLAWDBOT_PYTHON_VENV}/bin/pip install --upgrade pip
+
 
 COPY --from=builder /app/package.json .
 COPY --from=builder /app/dist ./dist
@@ -51,6 +62,8 @@ RUN chown -R node:node ./src
 RUN chown -R node:node ./dist
 
 RUN npm install -g pnpm
+RUN echo "#!/bin/bash\n/usr/local/bin/node /app/dist/index.js \$@" > /usr/local/bin/clawdbot
+RUN chmod +x /usr/local/bin/clawdbot
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)
