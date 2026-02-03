@@ -115,7 +115,7 @@ def list_messages(query, limit=10):
         log(f"An error occurred: {error}")
         print(f"An error occurred: {error}")
 
-def read_message(uid):
+def read_message(uid, attachment=None):
     service = get_service()
     try:
         log(f"Reading message: {uid}")
@@ -129,6 +129,55 @@ def read_message(uid):
         
         snippet = message.get('snippet', '')
         print(f"Snippet: {snippet}\n")
+        
+        print("Attachments:")
+        payload = message['payload']
+        if 'parts' in payload:
+            for part in payload['parts']:
+                filename = part.get('filename', 'unnamed')
+                mime = part['mimeType']
+                size = part['body'].get('size', 0)
+                print(f"  - {filename} ({mime}, {size}B)")
+        elif 'filename' in payload:
+            filename = payload['filename']
+            mime = payload['mimeType']
+            size = payload['body'].get('size', 0)
+            print(f"  - {filename} ({mime}, {size}B)")
+        print("")
+        
+        if attachment:
+            print(f"Reading attachment: {attachment}")
+            payload = message['payload']
+            found = False
+            if 'parts' in payload:
+                for part in payload['parts']:
+                    if part.get('filename') == attachment:
+                        att_id = part['body']['attachmentId']
+                        att = service.users().messages().attachments().get(userId='me', messageId=uid, id=att_id).execute()
+                        data = base64.urlsafe_b64decode(att['data'])
+                        filename = attachment
+                        tmp_file = f'/tmp/{filename}'
+                        with open(tmp_file, 'wb') as f:
+                            f.write(data)
+                        print(f"Saved {tmp_file}")
+                        if filename.lower().endswith('.pdf'):
+                            import pdfplumber
+                            with pdfplumber.open(tmp_file) as pdf:
+                                text = ''
+                                for page in pdf.pages:
+                                    text += page.extract_text() or ''
+                                print("PDF Text Preview:")
+                                print(text[:3000] + ('...' if len(text) > 3000 else ''))
+                                amounts = re.findall(r'\\$([0-9,]+\\.?[0-9]*)', text)
+                                print(f"Amounts: {list(set(amounts))}")
+                        else:
+                            print("Text content:")
+                            with open(tmp_file, 'r') as f:
+                                print(f.read()[:2000])
+                        found = True
+                        break
+            if not found:
+                print(f"Attachment '{attachment}' not found.")
         
         # Parse full body - simple recursive finder for text/plain
         def get_text_part(part):
@@ -245,6 +294,7 @@ def main():
     # read
     parser_read = subparsers.add_parser("read", help="Read email by ID")
     parser_read.add_argument("uid", type=str, help="Message ID")
+    parser_read.add_argument("--attachment", nargs="?", help="Attachment filename to read")
     
     # send
     parser_send = subparsers.add_parser("send", help="Send email")
@@ -264,7 +314,7 @@ def main():
     elif args.command == "search":
         list_messages(args.query, args.limit)
     elif args.command == "read":
-        read_message(args.uid)
+        read_message(args.uid, args.attachment)
     elif args.command == "send":
         send_email(args.to, args.subject, args.body)
 
