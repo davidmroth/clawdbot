@@ -7,6 +7,7 @@ import hashlib
 import struct
 from pathlib import Path
 from datetime import datetime
+import yaml
 
 # Import llama_cpp for embeddings
 try:
@@ -181,7 +182,7 @@ def handelize(path):
     # Simplified version of TS handelize
     return path.replace('___', '/').lower()
 
-class SimpleConfig:
+class ConfigManager:
     def __init__(self, path):
         self.path = path
         self.config = {'collections': {}}
@@ -191,99 +192,38 @@ class SimpleConfig:
         if not os.path.exists(self.path):
             return
         
-        # Super naive parser that handles the specific structure we need
-        # This is NOT a full YAML parser.
         try:
-            current_collection = None
-            current_context_path = None
-            mode = 'root' # root, collections, collection_item, context
-            
             with open(self.path, 'r') as f:
-                for line in f:
-                    stripped = line.strip()
-                    if not stripped or stripped.startswith('#'):
-                        continue
-                        
-                    indent = len(line) - len(line.lstrip())
-                    
-                    if stripped.startswith('collections:'):
-                        mode = 'collections'
-                        continue
-                        
-                    if mode == 'collections' and indent == 2 and stripped.endswith(':'):
-                        name = stripped[:-1]
-                        self.config['collections'][name] = {}
-                        current_collection = name
-                        mode = 'collection_item'
-                        continue
-                        
-                    if mode == 'collection_item':
-                        if indent == 4:
-                            if stripped.startswith('context:'):
-                                self.config['collections'][current_collection]['context'] = {}
-                                mode = 'context'
-                                continue
-                            
-                            key, val = stripped.split(':', 1)
-                            key = key.strip()
-                            val = val.strip()
-                            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-                                val = val[1:-1]
-                            self.config['collections'][current_collection][key] = val
-                            
-                    if mode == 'context':
-                        if indent == 6:
-                            key, val = stripped.split(':', 1)
-                            key = key.strip()
-                            if (key.startswith('"') and key.endswith('"')) or (key.startswith("'") and key.endswith("'")):
-                                key = key[1:-1]
-                            
-                            val = val.strip()
-                            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-                                val = val[1:-1]
-                            
-                            self.config['collections'][current_collection]['context'][key] = val
-                        elif indent == 4:
-                            # Back to collection item
-                            mode = 'collection_item'
-                            # Reprocess line
-                            key, val = stripped.split(':', 1)
-                            key = key.strip()
-                            val = val.strip()
-                            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
-                                val = val[1:-1]
-                            self.config['collections'][current_collection][key] = val
-                            
-                    if indent == 0 and stripped != 'collections:':
-                        mode = 'root'
-                        
+                data = yaml.safe_load(f)
+                if data:
+                    self.config = data
+                    # Ensure collections key exists
+                    if 'collections' not in self.config:
+                        self.config['collections'] = {}
         except Exception as e:
-            print(f"Warning: Failed to parse config (naive parser): {e}")
+            print(f"Error loading config: {e}")
 
     def save(self):
-        with open(self.path, 'w') as f:
-            f.write("collections:\n")
-            for name, col in self.config['collections'].items():
-                f.write(f"  {name}:\n")
-                if 'path' in col:
-                    f.write(f"    path: {col['path']}\n")
-                if 'pattern' in col:
-                    f.write(f"    pattern: \"{col['pattern']}\"\n")
-                if 'update' in col:
-                    f.write(f"    update: \"{col['update']}\"\n")
-                
-                if 'context' in col and col['context']:
-                    f.write(f"    context:\n")
-                    for k, v in col['context'].items():
-                        # Escape strings if needed
-                        k_str = f'"{k}"' if ':' in k or '/' in k else k
-                        v_str = f'"{v}"'
-                        f.write(f"      {k_str}: {v_str}\n")
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            with open(self.path, 'w') as f:
+                yaml.safe_dump(self.config, f, default_flow_style=False, sort_keys=False)
+        except Exception as e:
+            print(f"Error saving config: {e}")
 
     def get_collections(self):
-        return [{'name': k, **v} for k, v in self.config['collections'].items()]
+        cols = []
+        for name, data in self.config.get('collections', {}).items():
+            col = {'name': name}
+            col.update(data)
+            cols.append(col)
+        return cols
 
     def add_context(self, collection, path, text):
+        if 'collections' not in self.config:
+            self.config['collections'] = {}
+            
         if collection not in self.config['collections']:
             print(f"Collection '{collection}' not found.")
             return
@@ -296,6 +236,9 @@ class SimpleConfig:
         print(f"Context added to '{collection}' for path '{path}'")
 
     def remove_context(self, collection, path):
+        if 'collections' not in self.config:
+            return
+            
         if collection not in self.config['collections']:
             return
         
@@ -306,7 +249,7 @@ class SimpleConfig:
                 print(f"Context removed from '{collection}' path '{path}'")
 
 def load_config():
-    return SimpleConfig(CONFIG_FILE)
+    return ConfigManager(CONFIG_FILE)
 
 def get_collections():
     cfg = load_config()
