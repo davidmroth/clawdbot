@@ -4,11 +4,21 @@ import glob
 import sqlite3
 import argparse
 import hashlib
+import struct
 from pathlib import Path
 from datetime import datetime
 
+# Import llama_cpp for embeddings
+try:
+    from llama_cpp import Llama
+    LLAMA_AVAILABLE = True
+except ImportError:
+    LLAMA_AVAILABLE = False
+
 # Configuration
 DEFAULT_DB_PATH = os.path.expanduser('~/.cache/qmd/index.sqlite')
+# Model path (hardcoded for now based on what we saw in qmd-models)
+EMBED_MODEL_PATH = '/app/qmd-models/nomic-embed-text-v1.5.Q4_K_M.gguf'
 CONFIG_DIR = os.path.expanduser('~/.config/qmd')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'index.yml')
 
@@ -564,20 +574,68 @@ def cmd_context(args):
 
         cfg.remove_context(collection, rel_path)
 
+def get_embedding_model():
+    if not LLAMA_AVAILABLE:
+        print("Error: llama-cpp-python not installed.")
+        return None
+    
+    if not os.path.exists(EMBED_MODEL_PATH):
+        print(f"Error: Model not found at {EMBED_MODEL_PATH}")
+        return None
+
+    try:
+        # Initialize Llama model for embeddings
+        # verbose=False to reduce noise
+        return Llama(model_path=EMBED_MODEL_PATH, embedding=True, verbose=False)
+    except Exception as e:
+        print(f"Error initializing model: {e}")
+        return None
+
+def chunk_text(text, chunk_size=1000, overlap=100):
+    """
+    Simple character-based sliding window chunker.
+    """
+    if not text:
+        return []
+    
+    chunks = []
+    start = 0
+    text_len = len(text)
+    
+    while start < text_len:
+        end = min(start + chunk_size, text_len)
+        chunks.append(text[start:end])
+        
+        # If we reached the end, stop
+        if end == text_len:
+            break
+            
+        # Move start forward by stride (size - overlap)
+        start += (chunk_size - overlap)
+        
+    return chunks
+
 def cmd_embed(args):
     db_path = get_db_path()
     conn = init_db(db_path)
     
-    # Check for items needing embedding
-    # We look for hashes in documents that are active, but not in content_vectors (seq=0)
+    if args.force:
+        print("Force mode: Clearing existing embeddings...")
+        conn.execute('DELETE FROM content_vectors')
+        conn.execute('DELETE FROM vectors_vec')
+        conn.commit()
+
+    # 1. Identify content that needs embedding
     cur = conn.execute('''
-        SELECT COUNT(DISTINCT d.hash)
-        FROM documents d
-        LEFT JOIN content_vectors v ON d.hash = v.hash AND v.seq = 0
+        SELECT DISTINCT c.hash, c.doc
+        FROM content c
+        JOIN documents d ON c.hash = d.hash
+        LEFT JOIN content_vectors v ON c.hash = v.hash AND v.seq = 0
         WHERE d.active = 1 AND v.hash IS NULL
     ''')
-    count = cur.fetchone()[0]
     
+    rows = cur.fetchall()
+    count = len(rows)
     print(f"Documents needing embedding: {count}")
     
     if count == 0:
@@ -589,9 +647,168 @@ def cmd_embed(args):
         conn.close()
         return
 
-    print("Note: Embedding generation requires an LLM provider (not yet implemented in this Python port).")
-    print("This command currently only identifies missing embeddings.")
+    # 2. Initialize Model
+    llm = get_embedding_model()
+    if not llm:
+        conn.close()
+        return
+
+    print("Generating embeddings (with chunking)...")
+    now = datetime.utcnow().isoformat()
     
+    processed = 0
+    total_chunks = 0
+    
+    for row in rows:
+        content_hash, content_text = row
+        
+        # Chunk the text
+        # Using ~1024 chars (approx 256 tokens) with overlap
+        chunks = chunk_text(content_text, chunk_size=1024, overlap=128)
+        
+        for seq, chunk in enumerate(chunks):
+            try:
+                embedding = llm.embed(chunk)
+                if isinstance(embedding[0], list):
+                    embedding = embedding[0]
+                    
+                vector_bytes = struct.pack(f'{len(embedding)}f', *embedding)
+                
+                # Insert metadata
+                conn.execute('''
+                    INSERT OR REPLACE INTO content_vectors (hash, seq, pos, model, embedded_at)
+                    VALUES (?, ?, ?, 'nomic-embed', ?)
+                ''', (content_hash, seq, 0, now))
+
+                # Insert vector
+                pk = f"{content_hash}_{seq}"
+                conn.execute('''
+                    INSERT OR REPLACE INTO vectors_vec (hash_seq, embedding)
+                    VALUES (?, ?)
+                ''', (pk, vector_bytes))
+                
+                total_chunks += 1
+                
+            except Exception as e:
+                print(f"Failed to embed {content_hash} seq {seq}: {e}")
+
+        processed += 1
+        if processed % 5 == 0:
+            print(f"Processed {processed}/{count} docs ({total_chunks} chunks)...")
+            conn.commit()
+
+    conn.commit()
+    print(f"Finished. Docs: {processed}, Total Chunks: {total_chunks}")
+    conn.close()
+
+def search_vec(conn, query, limit=20, llm=None):
+    """Internal vector search function returning list of dicts"""
+    if not llm:
+        llm = get_embedding_model()
+        if not llm:
+            return []
+
+    try:
+        embedding = llm.embed(query)
+        if isinstance(embedding[0], list):
+            embedding = embedding[0]
+        query_vector = struct.pack(f'{len(embedding)}f', *embedding)
+        
+        # Group by document path to return unique files
+        # We take the MIN distance (best matching chunk)
+        cur = conn.execute('''
+            SELECT 
+                d.path, 
+                d.title, 
+                MIN(vec_distance_cosine(vv.embedding, ?)) as min_distance
+            FROM vectors_vec vv
+            JOIN content_vectors cv ON cv.hash || '_' || cv.seq = vv.hash_seq
+            JOIN documents d ON d.hash = cv.hash
+            WHERE d.active = 1
+            GROUP BY d.path
+            ORDER BY min_distance ASC
+            LIMIT ?
+        ''', (query_vector, limit))
+        
+        return [{'path': r[0], 'title': r[1], 'score': 1.0 - r[2], 'type': 'vec'} for r in cur.fetchall()]
+    except Exception as e:
+        print(f"Vector search error: {e}")
+        return []
+
+def search_fts(conn, query, limit=20):
+    """Internal FTS search function returning list of dicts"""
+    cur = conn.execute('''
+        SELECT filepath, title, rank
+        FROM documents_fts
+        WHERE documents_fts MATCH ?
+        ORDER BY rank
+        LIMIT ?
+    ''', (query, limit))
+    
+    # FTS rank is lower = better. We invert it roughly for normalization or just keep as rank.
+    # For RRF, we just need the ordered list.
+    return [{'path': r[0], 'title': r[1], 'score': r[2], 'type': 'fts'} for r in cur.fetchall()]
+
+def cmd_vsearch(args):
+    db_path = get_db_path()
+    conn = init_db(db_path)
+    
+    results = search_vec(conn, args.query, args.limit)
+    
+    if not results:
+        print("No matching documents found.")
+    else:
+        print(f"Vector search results for: '{args.query}'\n")
+        for r in results:
+            print(f"{r['score']:.4f}  {r['path']} ({r['title']})")
+                
+    conn.close()
+
+def cmd_query(args):
+    """Hybrid Search using Reciprocal Rank Fusion (RRF)"""
+    db_path = get_db_path()
+    conn = init_db(db_path)
+    
+    query = args.query
+    
+    # 1. Run FTS
+    # print("Running keyword search...")
+    fts_results = search_fts(conn, query, limit=50)
+    
+    # 2. Run Vector
+    # print("Running semantic search...")
+    vec_results = search_vec(conn, query, limit=50)
+    
+    # 3. Fuse Results (RRF)
+    # score = 1 / (k + rank)
+    k = 60
+    scores = {}
+    titles = {}
+    
+    # Process FTS (Rank is 0-indexed in the list)
+    for rank, res in enumerate(fts_results):
+        path = res['path']
+        titles[path] = res['title']
+        scores[path] = scores.get(path, 0) + (1 / (k + rank + 1))
+        
+    # Process Vec
+    for rank, res in enumerate(vec_results):
+        path = res['path']
+        titles[path] = res['title']
+        scores[path] = scores.get(path, 0) + (1 / (k + rank + 1))
+        
+    # Sort by score DESC
+    final_results = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    
+    # Display
+    print(f"Hybrid search results for: '{query}'\n")
+    for i, (path, score) in enumerate(final_results[:args.limit]):
+        title = titles[path]
+        print(f"{i+1}. {path} ({title}) [RRF: {score:.4f}]")
+    
+    if not final_results:
+        print("No results found.")
+
     conn.close()
 
 def main():
@@ -604,10 +821,21 @@ def main():
     # Embed command
     parser_embed = subparsers.add_parser('embed', help='Generate embeddings')
     parser_embed.add_argument('--dry-run', action='store_true', help='Check counts without generating')
+    parser_embed.add_argument('--force', action='store_true', help='Force re-embedding of all documents')
     
-    # Search command
-    parser_search = subparsers.add_parser('search', help='Search documents')
+    # Search command (FTS)
+    parser_search = subparsers.add_parser('search', help='Search documents (Keyword/FTS)')
     parser_search.add_argument('query', help='Search query')
+    
+    # VSearch command (Vector)
+    parser_vsearch = subparsers.add_parser('vsearch', help='Search documents (Semantic/Vector)')
+    parser_vsearch.add_argument('query', help='Search query')
+    parser_vsearch.add_argument('-n', '--limit', type=int, default=10, help='Number of results')
+
+    # Query command (Hybrid)
+    parser_query = subparsers.add_parser('query', help='Hybrid Search (FTS + Vector)')
+    parser_query.add_argument('query', help='Search query')
+    parser_query.add_argument('-n', '--limit', type=int, default=10, help='Number of results')
     
     # Get command
     parser_get = subparsers.add_parser('get', help='Get document content')
@@ -641,6 +869,10 @@ def main():
         cmd_embed(args)
     elif args.command == 'search':
         cmd_search(args)
+    elif args.command == 'vsearch':
+        cmd_vsearch(args)
+    elif args.command == 'query':
+        cmd_query(args)
     elif args.command == 'get':
         cmd_get(args)
     elif args.command == 'status':
