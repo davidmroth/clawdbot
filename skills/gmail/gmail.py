@@ -302,6 +302,9 @@ def main():
     parser_send.add_argument("subject", type=str, help="Subject")
     parser_send.add_argument("body", type=str, nargs="?", default="", help="Body content")
 
+    parser_daily = subparsers.add_parser("daily", help="Daily unread (today)")
+    parser_daily.add_argument("--limit", type=int, default=20, help="Limit")
+
     args = parser.parse_args()
     
     # Default behavior: scrape
@@ -313,6 +316,8 @@ def main():
         list_messages("is:unread", args.limit)
     elif args.command == "search":
         list_messages(args.query, args.limit)
+    elif args.command == "daily":
+        list_messages("newer_than:1d is:unread", args.limit)
     elif args.command == "read":
         read_message(args.uid, args.attachment)
     elif args.command == "send":
