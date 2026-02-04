@@ -534,26 +534,42 @@ def get_embedding_model():
         print(f"Error initializing model: {e}")
         return None
 
-def chunk_text(text, chunk_size=1000, overlap=100):
+def chunk_by_tokens(llm, text, chunk_size=512, overlap=64):
     """
-    Simple character-based sliding window chunker.
+    Token-based chunking using the LLM tokenizer.
+    Guarantees chunks fit within context and don't split words.
     """
     if not text:
         return []
-    
+        
+    try:
+        # Llama.tokenize expects bytes
+        tokens = llm.tokenize(text.encode("utf-8"))
+    except Exception as e:
+        print(f"Tokenization error: {e}")
+        return [text] # Fallback to whole text if tokenizer fails
+
+    total_tokens = len(tokens)
+    if total_tokens <= chunk_size:
+        return [text]
+
     chunks = []
     start = 0
-    text_len = len(text)
     
-    while start < text_len:
-        end = min(start + chunk_size, text_len)
-        chunks.append(text[start:end])
+    while start < total_tokens:
+        end = min(start + chunk_size, total_tokens)
+        chunk_tokens = tokens[start:end]
         
-        # If we reached the end, stop
-        if end == text_len:
+        try:
+            # Detokenize returns bytes
+            chunk_str = llm.detokenize(chunk_tokens).decode("utf-8", errors="ignore")
+            chunks.append(chunk_str)
+        except Exception as e:
+            print(f"Detokenize error: {e}")
+            
+        if end == total_tokens:
             break
             
-        # Move start forward by stride (size - overlap)
         start += (chunk_size - overlap)
         
     return chunks
@@ -596,7 +612,7 @@ def cmd_embed(args):
         conn.close()
         return
 
-    print("Generating embeddings (with chunking)...")
+    print("Generating embeddings (Token-based Chunking)...")
     now = datetime.utcnow().isoformat()
     
     processed = 0
@@ -605,9 +621,9 @@ def cmd_embed(args):
     for row in rows:
         content_hash, content_text = row
         
-        # Chunk the text
-        # Using ~1024 chars (approx 256 tokens) with overlap
-        chunks = chunk_text(content_text, chunk_size=1024, overlap=128)
+        # Token-based chunking
+        # Nomic v1.5 supports 8192, but 512 is good for RAG granularity
+        chunks = chunk_by_tokens(llm, content_text, chunk_size=512, overlap=64)
         
         for seq, chunk in enumerate(chunks):
             try:
