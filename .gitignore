@@ -74,3 +74,6 @@ dist_backup
 sqlite-web
 docker-compose.override.yml
 .cursor/debug.log
+
+# Models
+qmd-models/*.gguf

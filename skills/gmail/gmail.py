@@ -8,7 +8,7 @@ import base64
 import re
 import argparse
 from datetime import datetime
-from bs4 import BeautifulSoup
+# from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -203,6 +203,7 @@ def read_message(uid, attachment=None):
                 return None
              html_content = get_html_part(message['payload'])
              if html_content:
+                 from bs4 import BeautifulSoup
                  soup = BeautifulSoup(html_content, 'html.parser')
                  body = soup.get_text()
         
@@ -265,6 +266,7 @@ def scrape_latest():
         full_text = get_all_text(message['payload'])
         
         # If HTML, parse it
+        from bs4 import BeautifulSoup
         soup = BeautifulSoup(full_text, 'html.parser')
         clean_text = soup.get_text()
         
