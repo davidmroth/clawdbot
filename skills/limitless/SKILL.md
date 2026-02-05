@@ -1,6 +1,6 @@
 ---
 name: limitless
-description: Access Limitless Pendant data (Lifelogs) to search and retrieve memories, conversations, and audio transcripts.
+description: Access Limitless Pendant data (Lifelogs) to search and retrieve memories, conversations, meetings, and audio transcripts.
 metadata: { "clawdbot": { "emoji": "🧠", "env": ["LIMITLESS_API_KEY"] } }
 ---
 
@@ -11,7 +11,7 @@ Integration with the Limitless Developer API to access Lifelogs.
 ## Configuration
 
 Requires an API Key.
-Set the environment variable `LIMITLESS_API_KEY`.
+Check/set environment variable `LIMITLESS_API_KEY`.
 
 ## Tools
 
