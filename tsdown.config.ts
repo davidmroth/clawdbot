@@ -4,29 +4,18 @@ const env = {
   NODE_ENV: "production",
 };
 
-export default defineConfig([
-  {
-    entry: "src/index.ts",
-    env,
-    fixedExtension: false,
-    platform: "node",
-  },
-  {
-    entry: "src/entry.ts",
-    env,
-    fixedExtension: false,
-    platform: "node",
-  },
-  {
-    entry: "src/plugin-sdk/index.ts",
-    env,
-    fixedExtension: false,
-    platform: "node",
-  },
-  {
-    entry: "src/extensionAPI.ts",
-    env,
-    fixedExtension: false,
-    platform: "node",
-  },
-]);
+export default defineConfig({
+  entry: [
+    "src/index.ts",
+    "src/entry.ts",
+    "src/plugin-sdk/index.ts",
+    "src/extensionAPI.ts",
+  ],
+  outDir: "dist",
+  clean: true,
+  dts: true,
+  env,
+  fixedExtension: false,
+  platform: "node",
+  external: [/^@reflink/],
+});
