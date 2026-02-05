@@ -7,14 +7,16 @@ import process from "node:process";
 const args = process.argv.slice(2);
 const env = { ...process.env };
 const cwd = process.cwd();
-const compiler = env.CLAWDBOT_TS_COMPILER === "tsc" ? "tsc" : "tsgo";
-const projectArgs = ["--project", "tsconfig.json"];
+const compiler = "tsdown";
 
 const distRoot = path.join(cwd, "dist");
 const distEntry = path.join(distRoot, "entry.js");
 const buildStampPath = path.join(distRoot, ".buildstamp");
 const srcRoot = path.join(cwd, "src");
-const configFiles = [path.join(cwd, "tsconfig.json"), path.join(cwd, "package.json")];
+const configFiles = [
+  path.join(cwd, "tsconfig.json"),
+  path.join(cwd, "package.json"),
+];
 
 const statMtime = (filePath) => {
   try {
@@ -107,7 +109,9 @@ const writeBuildStamp = () => {
     fs.writeFileSync(buildStampPath, `${Date.now()}\n`);
   } catch (error) {
     // Best-effort stamp; still allow the runner to start.
-    logRunner(`Failed to write build stamp: ${error?.message ?? "unknown error"}`);
+    logRunner(
+      `Failed to write build stamp: ${error?.message ?? "unknown error"}`,
+    );
   }
 };
 
@@ -115,10 +119,12 @@ if (!shouldBuild()) {
   runNode();
 } else {
   logRunner("Building TypeScript (dist is stale).");
-  const pnpmArgs = ["exec", compiler, ...projectArgs];
+  const pnpmArgs = ["exec", compiler];
   const buildCmd = process.platform === "win32" ? "cmd.exe" : "pnpm";
   const buildArgs =
-    process.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...pnpmArgs] : pnpmArgs;
+    process.platform === "win32"
+      ? ["/d", "/s", "/c", "pnpm", ...pnpmArgs]
+      : pnpmArgs;
   const build = spawn(buildCmd, buildArgs, {
     cwd,
     env,

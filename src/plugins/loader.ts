@@ -17,7 +17,11 @@ import {
 } from "./config-state.js";
 import { initializeGlobalHookRunner } from "./hook-runner-global.js";
 import { clearPluginCommands } from "./commands.js";
-import { createPluginRegistry, type PluginRecord, type PluginRegistry } from "./registry.js";
+import {
+  createPluginRegistry,
+  type PluginRecord,
+  type PluginRegistry,
+} from "./registry.js";
 import { createPluginRuntime } from "./runtime/index.js";
 import { setActivePluginRegistry } from "./runtime.js";
 import { validateJsonSchemaValue } from "./schema-validator.js";
@@ -46,14 +50,16 @@ const defaultLogger = () => createSubsystemLogger("plugins");
 const resolvePluginSdkAlias = (): string | null => {
   try {
     const modulePath = fileURLToPath(import.meta.url);
-    const isDistRuntime = modulePath.split(path.sep).includes("dist");
-    const preferDist = process.env.VITEST || process.env.NODE_ENV === "test" || isDistRuntime;
+    const isProduction = process.env.NODE_ENV === "production";
+    const isTest = process.env.VITEST || process.env.NODE_ENV === "test";
     let cursor = path.dirname(modulePath);
     for (let i = 0; i < 6; i += 1) {
       const srcCandidate = path.join(cursor, "src", "plugin-sdk", "index.ts");
       const distCandidate = path.join(cursor, "dist", "plugin-sdk", "index.js");
-      const orderedCandidates = preferDist
-        ? [distCandidate, srcCandidate]
+      const orderedCandidates = isProduction
+        ? isTest
+          ? [distCandidate, srcCandidate]
+          : [distCandidate]
         : [srcCandidate, distCandidate];
       for (const candidate of orderedCandidates) {
         if (fs.existsSync(candidate)) return candidate;
@@ -72,7 +78,9 @@ function buildCacheKey(params: {
   workspaceDir?: string;
   plugins: NormalizedPluginsConfig;
 }): string {
-  const workspaceKey = params.workspaceDir ? resolveUserPath(params.workspaceDir) : "";
+  const workspaceKey = params.workspaceDir
+    ? resolveUserPath(params.workspaceDir)
+    : "";
   return `${workspaceKey}::${JSON.stringify(params.plugins)}`;
 }
 
@@ -83,7 +91,10 @@ function validatePluginConfig(params: {
 }): { ok: boolean; value?: Record<string, unknown>; errors?: string[] } {
   const schema = params.schema;
   if (!schema) {
-    return { ok: true, value: params.value as Record<string, unknown> | undefined };
+    return {
+      ok: true,
+      value: params.value as Record<string, unknown> | undefined,
+    };
   }
   const cacheKey = params.cacheKey ?? JSON.stringify(schema);
   const result = validateJsonSchemaValue({
@@ -92,7 +103,10 @@ function validatePluginConfig(params: {
     value: params.value ?? {},
   });
   if (result.ok) {
-    return { ok: true, value: params.value as Record<string, unknown> | undefined };
+    return {
+      ok: true,
+      value: params.value as Record<string, unknown> | undefined,
+    };
   }
   return { ok: false, errors: result.errors };
 }
@@ -157,11 +171,16 @@ function createPluginRecord(params: {
   };
 }
 
-function pushDiagnostics(diagnostics: PluginDiagnostic[], append: PluginDiagnostic[]) {
+function pushDiagnostics(
+  diagnostics: PluginDiagnostic[],
+  append: PluginDiagnostic[],
+) {
   diagnostics.push(...append);
 }
 
-export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegistry {
+export function loadClawdbotPlugins(
+  options: PluginLoadOptions = {},
+): PluginRegistry {
   const cfg = options.config ?? {};
   const logger = options.logger ?? defaultLogger();
   const validateOnly = options.mode === "validate";
@@ -186,7 +205,10 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
   const { registry, createApi } = createPluginRegistry({
     logger,
     runtime,
-    coreGatewayHandlers: options.coreGatewayHandlers as Record<string, GatewayRequestHandler>,
+    coreGatewayHandlers: options.coreGatewayHandlers as Record<
+      string,
+      GatewayRequestHandler
+    >,
   });
 
   const discovery = discoverClawdbotPlugins({
@@ -205,8 +227,21 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
   const pluginSdkAlias = resolvePluginSdkAlias();
   const jiti = createJiti(import.meta.url, {
     interopDefault: true,
-    extensions: [".ts", ".tsx", ".mts", ".cts", ".mtsx", ".ctsx", ".js", ".mjs", ".cjs", ".json"],
-    ...(pluginSdkAlias ? { alias: { "clawdbot/plugin-sdk": pluginSdkAlias } } : {}),
+    extensions: [
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".mtsx",
+      ".ctsx",
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".json",
+    ],
+    ...(pluginSdkAlias
+      ? { alias: { "clawdbot/plugin-sdk": pluginSdkAlias } }
+      : {}),
   });
 
   const manifestByRoot = new Map(
@@ -243,7 +278,11 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
       continue;
     }
 
-    const enableState = resolveEnableState(pluginId, candidate.origin, normalized);
+    const enableState = resolveEnableState(
+      pluginId,
+      candidate.origin,
+      normalized,
+    );
     const entry = normalized.entries[pluginId];
     const record = createPluginRecord({
       id: pluginId,
@@ -286,7 +325,9 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
     try {
       mod = jiti(candidate.source) as ClawdbotPluginModule;
     } catch (err) {
-      logger.error(`[plugins] ${record.id} failed to load from ${record.source}: ${String(err)}`);
+      logger.error(
+        `[plugins] ${record.id} failed to load from ${record.source}: ${String(err)}`,
+      );
       record.status = "error";
       record.error = String(err);
       registry.plugins.push(record);
@@ -359,7 +400,9 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
     });
 
     if (!validatedConfig.ok) {
-      logger.error(`[plugins] ${record.id} invalid config: ${validatedConfig.errors?.join(", ")}`);
+      logger.error(
+        `[plugins] ${record.id} invalid config: ${validatedConfig.errors?.join(", ")}`,
+      );
       record.status = "error";
       record.error = `invalid config: ${validatedConfig.errors?.join(", ")}`;
       registry.plugins.push(record);
@@ -406,7 +449,8 @@ export function loadClawdbotPlugins(options: PluginLoadOptions = {}): PluginRegi
           level: "warn",
           pluginId: record.id,
           source: record.source,
-          message: "plugin register returned a promise; async registration is ignored",
+          message:
+            "plugin register returned a promise; async registration is ignored",
         });
       }
       registry.plugins.push(record);
