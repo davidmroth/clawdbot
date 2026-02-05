@@ -27,10 +27,7 @@ export const DEFAULT_USER_FILENAME = "USER.md";
 export const DEFAULT_HEARTBEAT_FILENAME = "HEARTBEAT.md";
 export const DEFAULT_BOOTSTRAP_FILENAME = "BOOTSTRAP.md";
 
-const TEMPLATE_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../docs/reference/templates",
-);
+const TEMPLATE_DIR = path.resolve(process.cwd(), "docs/reference/templates");
 
 function stripFrontMatter(content: string): string {
   if (!content.startsWith("---")) return content;
@@ -93,7 +90,9 @@ async function hasGitRepo(dir: string): Promise<boolean> {
 
 async function isGitAvailable(): Promise<boolean> {
   try {
-    const result = await runCommandWithTimeout(["git", "--version"], { timeoutMs: 2_000 });
+    const result = await runCommandWithTimeout(["git", "--version"], {
+      timeoutMs: 2_000,
+    });
     return result.code === 0;
   } catch {
     return false;
@@ -105,7 +104,10 @@ async function ensureGitRepo(dir: string, isBrandNewWorkspace: boolean) {
   if (await hasGitRepo(dir)) return;
   if (!(await isGitAvailable())) return;
   try {
-    await runCommandWithTimeout(["git", "init"], { cwd: dir, timeoutMs: 10_000 });
+    await runCommandWithTimeout(["git", "init"], {
+      cwd: dir,
+      timeoutMs: 10_000,
+    });
   } catch {
     // Ignore git init failures; workspace creation should still succeed.
   }
@@ -124,7 +126,9 @@ export async function ensureAgentWorkspace(params?: {
   heartbeatPath?: string;
   bootstrapPath?: string;
 }> {
-  const rawDir = params?.dir?.trim() ? params.dir.trim() : DEFAULT_AGENT_WORKSPACE_DIR;
+  const rawDir = params?.dir?.trim()
+    ? params.dir.trim()
+    : DEFAULT_AGENT_WORKSPACE_DIR;
   const dir = resolveUserPath(rawDir);
   await fs.mkdir(dir, { recursive: true });
 
@@ -139,7 +143,14 @@ export async function ensureAgentWorkspace(params?: {
   const bootstrapPath = path.join(dir, DEFAULT_BOOTSTRAP_FILENAME);
 
   const isBrandNewWorkspace = await (async () => {
-    const paths = [agentsPath, soulPath, toolsPath, identityPath, userPath, heartbeatPath];
+    const paths = [
+      agentsPath,
+      soulPath,
+      toolsPath,
+      identityPath,
+      userPath,
+      heartbeatPath,
+    ];
     const existing = await Promise.all(
       paths.map(async (p) => {
         try {
@@ -184,7 +195,9 @@ export async function ensureAgentWorkspace(params?: {
   };
 }
 
-export async function loadWorkspaceBootstrapFiles(dir: string): Promise<WorkspaceBootstrapFile[]> {
+export async function loadWorkspaceBootstrapFiles(
+  dir: string,
+): Promise<WorkspaceBootstrapFile[]> {
   const resolvedDir = resolveUserPath(dir);
 
   const entries: Array<{
@@ -238,7 +251,10 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
   return result;
 }
 
-const SUBAGENT_BOOTSTRAP_ALLOWLIST = new Set([DEFAULT_AGENTS_FILENAME, DEFAULT_TOOLS_FILENAME]);
+const SUBAGENT_BOOTSTRAP_ALLOWLIST = new Set([
+  DEFAULT_AGENTS_FILENAME,
+  DEFAULT_TOOLS_FILENAME,
+]);
 
 export function filterBootstrapFilesForSession(
   files: WorkspaceBootstrapFile[],
