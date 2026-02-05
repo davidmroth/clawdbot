@@ -315,11 +315,6 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
   });
 
   return async (event: { event?: string; data?: string }) => {
-    // DEBUG: Log all events entering handler
-    console.log(
-      `[SIGNAL-EVENT-DEBUG] Event received: event=${event.event} hasData=${!!event.data}`,
-    );
-
     if (event.event !== "receive" || !event.data) return;
 
     let payload: SignalReceivePayload | null = null;
@@ -330,17 +325,11 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       return;
     }
 
-    // DEBUG: Log parsed payload
-    console.log(
-      `[SIGNAL-EVENT-DEBUG] Payload parsed: hasEnvelope=${!!payload?.envelope} hasDataMessage=${!!payload?.envelope?.dataMessage} hasSyncMessage=${!!payload?.envelope?.syncMessage}`,
-    );
-
     if (payload?.exception?.message) {
       deps.runtime.error?.(`receive exception: ${payload.exception.message}`);
     }
     const envelope = payload?.envelope;
     if (!envelope) {
-      console.log(`[SIGNAL-EVENT-DEBUG] No envelope, returning`);
       return;
     }
 
@@ -349,14 +338,8 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
 
     const sender = resolveSignalSender(envelope);
     if (!sender) {
-      console.log(`[SIGNAL-EVENT-DEBUG] No sender resolved, returning`);
       return;
     }
-
-    // DEBUG: Log sender info
-    console.log(
-      `[SIGNAL-EVENT-DEBUG] Sender resolved: kind=${sender.kind} id=${sender.kind === "phone" ? sender.e164 : sender.raw}`,
-    );
 
     if (deps.account && sender.kind === "phone") {
       // PATCH: Allow if it's a sync message
@@ -364,7 +347,6 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         sender.e164 === normalizeE164(deps.account) &&
         !envelope.syncMessage
       ) {
-        console.log(`[SIGNAL-EVENT-DEBUG] Sender is self, returning`);
         return;
       }
     }
@@ -460,24 +442,12 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         ? true
         : isSignalSenderAllowed(sender, effectiveDmAllow);
 
-    // DEBUG: Log DM policy check
-    console.log(
-      `[SIGNAL-EVENT-DEBUG] DM check: isGroup=${isGroup} dmPolicy=${deps.dmPolicy} dmAllowed=${dmAllowed} senderId=${senderAllowId}`,
-    );
-
     if (!isGroup) {
       if (deps.dmPolicy === "disabled") {
-        console.log(`[SIGNAL-EVENT-DEBUG] DM disabled, returning`);
         return;
       }
       if (!dmAllowed) {
-        console.log(
-          `[SIGNAL-EVENT-DEBUG] DM not allowed, checking pairing policy...`,
-        );
         if (deps.dmPolicy === "pairing") {
-          console.log(
-            `[SIGNAL-EVENT-DEBUG] DM policy is pairing, calling upsertChannelPairingRequest...`,
-          );
           const senderId = senderAllowId;
           const { code, created } = await upsertChannelPairingRequest({
             channel: "signal",
@@ -605,49 +575,37 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       messageText || placeholder || dataMessage.quote?.text?.trim() || "";
     if (!bodyText) return;
 
-    const receiptTimestamp =
-      typeof envelope.timestamp === "number"
-        ? envelope.timestamp
-        : typeof dataMessage.timestamp === "number"
-          ? dataMessage.timestamp
-          : undefined;
-    if (
-      deps.sendReadReceipts &&
-      !deps.readReceiptsViaDaemon &&
-      !isGroup &&
-      receiptTimestamp
-    ) {
-      try {
-        await sendReadReceiptSignal(
-          `signal:${senderRecipient}`,
-          receiptTimestamp,
-          {
-            baseUrl: deps.baseUrl,
-            account: deps.account,
-            accountId: deps.accountId,
-          },
-        );
-      } catch (err) {
-        logVerbose(
-          `signal read receipt failed for ${senderDisplay}: ${String(err)}`,
-        );
-      }
-    } else if (
-      deps.sendReadReceipts &&
-      !deps.readReceiptsViaDaemon &&
-      !isGroup &&
-      !receiptTimestamp
-    ) {
-      logVerbose(
-        `signal read receipt skipped (missing timestamp) for ${senderDisplay}`,
-      );
-    }
-
     const senderName = envelope.sourceName ?? senderDisplay;
     const messageId =
       typeof envelope.timestamp === "number"
         ? String(envelope.timestamp)
         : undefined;
+
+    // PATCH: Send read receipt for processed messages (DMs only)
+    const receiptTimestamp = envelope.timestamp ?? dataMessage.timestamp;
+    if (
+      deps.sendReadReceipts &&
+      !deps.readReceiptsViaDaemon &&
+      !isGroup &&
+      receiptTimestamp &&
+      typeof receiptTimestamp === "number"
+    ) {
+      // Fire-and-forget read receipt
+      void sendReadReceiptSignal(
+        `signal:${senderRecipient}`,
+        receiptTimestamp,
+        {
+          baseUrl: deps.baseUrl,
+          account: deps.account,
+          accountId: deps.accountId,
+        },
+      ).catch((err) => {
+        logVerbose(
+          `signal read receipt failed for ${senderDisplay}: ${String(err)}`,
+        );
+      });
+    }
+
     await inboundDebouncer.enqueue({
       senderName,
       senderDisplay,

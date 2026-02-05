@@ -23,7 +23,10 @@ export type SignalSendResult = {
   timestamp?: number;
 };
 
-export type SignalRpcOpts = Pick<SignalSendOpts, "baseUrl" | "account" | "accountId" | "timeoutMs">;
+export type SignalRpcOpts = Pick<
+  SignalSendOpts,
+  "baseUrl" | "account" | "accountId" | "timeoutMs"
+>;
 
 export type SignalReceiptType = "read" | "viewed";
 
@@ -104,7 +107,8 @@ function resolveSignalRpcContext(
   if (!baseUrl) {
     throw new Error("Signal base URL is required");
   }
-  const account = opts.account?.trim() || resolvedAccount?.config.account?.trim();
+  const account =
+    opts.account?.trim() || resolvedAccount?.config.account?.trim();
   return { baseUrl, account };
 }
 
@@ -201,10 +205,14 @@ export async function sendMessageSignal(
   }
   Object.assign(params, targetParams);
 
-  const result = await signalRpcRequest<{ timestamp?: number }>("send", params, {
-    baseUrl,
-    timeoutMs: opts.timeoutMs,
-  });
+  const result = await signalRpcRequest<{ timestamp?: number }>(
+    "send",
+    params,
+    {
+      baseUrl,
+      timeoutMs: opts.timeoutMs,
+    },
+  );
   const timestamp = result?.timestamp;
   return {
     messageId: timestamp ? String(timestamp) : "unknown",
@@ -245,8 +253,8 @@ export async function sendReadReceiptSignal(
   if (!targetParams) return false;
   const params: Record<string, unknown> = {
     ...targetParams,
-    targetTimestamp,
-    type: opts.type ?? "read",
+    timestamp: targetTimestamp,
+    receipt_type: opts.type ?? "read",
   };
   if (account) params.account = account;
   await signalRpcRequest("sendReceipt", params, {

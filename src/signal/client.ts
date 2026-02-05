@@ -87,25 +87,43 @@ export async function signalRpcRequest<T = unknown>(
       restParams.recipients = [restParams.recipients];
     }
     bodyPayload = JSON.stringify(restParams);
-    console.log(`[SIGNAL-DEBUG] Sending ${method} payload:`, bodyPayload);
+    bodyPayload = JSON.stringify(restParams);
   } else if (method === "sendTyping") {
     // PUT /v1/typing-indicator/{number} - show typing
     endpoint = `${baseUrl}/v1/typing-indicator/${encodeURIComponent(String(params?.account || ""))}`;
     httpMethod = "PUT";
     const restParams = { ...params };
     delete restParams.account;
+    if (
+      Array.isArray(restParams.recipient) &&
+      restParams.recipient.length > 0
+    ) {
+      restParams.recipient = restParams.recipient[0];
+    }
     bodyPayload = JSON.stringify(restParams);
   } else if (method === "sendReceipt") {
     // POST /v1/receipts/{number}
     endpoint = `${baseUrl}/v1/receipts/${encodeURIComponent(String(params?.account || ""))}`;
     const restParams = { ...params };
     delete restParams.account;
+    if (
+      Array.isArray(restParams.recipient) &&
+      restParams.recipient.length > 0
+    ) {
+      restParams.recipient = restParams.recipient[0];
+    }
     bodyPayload = JSON.stringify(restParams);
   } else if (method === "sendReaction") {
     // POST /v1/reactions/{number}
     endpoint = `${baseUrl}/v1/reactions/${encodeURIComponent(String(params?.account || ""))}`;
     const restParams = { ...params };
     delete restParams.account;
+    if (
+      Array.isArray(restParams.recipient) &&
+      restParams.recipient.length > 0
+    ) {
+      restParams.recipient = restParams.recipient[0];
+    }
     bodyPayload = JSON.stringify(restParams);
   } else if (method === "version") {
     // GET /v1/about - returns version info
@@ -156,11 +174,6 @@ export async function signalRpcRequest<T = unknown>(
   // PATCH: Sanitize response (some versions of signal-cli-rest-api leak stdout/progress bars)
   const jsonStart = text.indexOf("{");
   const jsonEnd = text.lastIndexOf("}");
-
-  // LOGGING
-  if (text.trim().length > 0 && (jsonStart === -1 || jsonEnd === -1)) {
-    console.log(`[SignalRPC] Invalid JSON candidate: ${JSON.stringify(text)}`);
-  }
 
   if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
     text = text.slice(jsonStart, jsonEnd + 1);

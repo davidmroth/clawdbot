@@ -1,5 +1,8 @@
 services:
   clawdbot-gateway:
+    container_name: gateway
+    build:
+      context: .
     image: ${CLAWDBOT_IMAGE:-clawdbot:local}
     environment:
       HOME: /home/node
@@ -25,6 +28,9 @@ services:
       ]
 
   clawdbot-cli:
+    container_name: cli
+    build:
+      context: .
     image: ${CLAWDBOT_IMAGE:-clawdbot:local}
     environment:
       HOME: /home/node
