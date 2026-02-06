@@ -84,6 +84,7 @@ COPY skills/qmd/qmd.py ./usr/local/bin/qdm.py
 COPY qmd-models ./qmd-models
 
 RUN mkdir src
+RUN mkdir -p ./dist/control-ui
 RUN chown -R node:node ./src
 RUN chown -R node:node ./dist
 

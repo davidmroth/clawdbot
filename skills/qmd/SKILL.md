@@ -26,6 +26,48 @@ All endpoints accept an optional `X-Instance-ID` header to scope data per Clawdb
 - User needs semantic search (conceptual similarity) not just keyword matching
 - User mentions meeting notes, transcripts, or documentation lookup
 
+## Content Lifecycle
+
+QMD does NOT discover content automatically. You must register collections, index them, and generate embeddings before search works.
+
+### Step 1: Check if anything is indexed
+
+```bash
+curl -s "http://localhost:8100/status"
+```
+
+If `total_documents` is 0 or `indexed` is false, you need to set up collections first.
+
+### Step 2: Register a collection
+
+A collection maps a name to a directory on disk and a file glob pattern.
+
+```bash
+curl -s -X POST "http://localhost:8100/collections" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "docs", "path": "/home/node/clawd/docs", "pattern": "**/*.md"}'
+```
+
+### Step 3: Index the collection (scan files into FTS)
+
+```bash
+curl -s -X POST "http://localhost:8100/index" \
+  -H "Content-Type: application/json" \
+  -d '{"collection": "docs"}'
+```
+
+### Step 4: Generate vector embeddings
+
+```bash
+curl -s -X POST "http://localhost:8100/embed" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Re-indexing
+
+When files on disk change, re-run Step 3 and Step 4 to update the index. Only changed files are re-processed.
+
 ## Search Endpoints
 
 Choose the right search mode for the task:
@@ -119,10 +161,10 @@ curl -X DELETE "http://localhost:8100/collections/notes"
 
 ## Recommended Workflow
 
-1. **Check what's available**: `curl http://localhost:8100/status`
-2. **Start with keyword search**: `curl "http://localhost:8100/fts?q=topic&n=10"`
-3. **Try semantic if needed**: `curl "http://localhost:8100/vsearch?q=describe+the+concept"`
-4. **Use hybrid for best results**: `curl "http://localhost:8100/search?q=question&n=10"`
+1. **Check status**: `curl http://localhost:8100/status` — if empty, set up collections first
+2. **Register collections** (first time only): `POST /collections` with name, path, pattern
+3. **Index + embed** (first time or after file changes): `POST /index` then `POST /embed`
+4. **Search**: `curl "http://localhost:8100/search?q=question&n=10"` (hybrid, best quality)
 5. **Retrieve full documents**: `curl "http://localhost:8100/doc/collection/path.md"`
 
 ## CLI Wrapper

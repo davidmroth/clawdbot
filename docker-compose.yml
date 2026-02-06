@@ -38,10 +38,6 @@ services:
       - qmd-data:/data/qmd
     init: true
     restart: unless-stopped
-    environment:
-      QMD_EMBED_MODEL_PATH: /app/qmd-models/nomic-embed-text-v1.5.Q4_K_M.gguf
-      QMD_DATA_DIR: /data/qmd
-      QMD_CONFIG_DIR: /data/qmd/config
 
   clawdbot-cli:
     container_name: cli
