@@ -80,7 +80,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /opt/python-env ${CLAWDBOT_PYTHON_VENV}
 
 # Copy qmd.py to root
-COPY skills/qmd/qmd.py ./qdm.py
+COPY skills/qmd/qmd.py ./usr/local/bin/qdm.py
 COPY qmd-models ./qmd-models
 
 RUN mkdir src
@@ -90,7 +90,7 @@ RUN chown -R node:node ./dist
 RUN npm install -g pnpm
 RUN echo "#!/bin/bash\n/usr/local/bin/node /app/dist/index.js $@" > /usr/local/bin/clawdbot
 RUN chmod +x /usr/local/bin/clawdbot
-RUN echo "#!/bin/bash\n/opt/python-env/bin/python /app/qdm.py $@" > /usr/local/bin/qmd
+RUN echo "#!/bin/bash\n/opt/python-env/bin/python /usr/local/bin/qmd.py $@" > /usr/local/bin/qmd
 RUN chmod +x /usr/local/bin/qmd
 
 

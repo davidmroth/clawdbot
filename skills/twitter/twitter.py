@@ -4,6 +4,7 @@ import os
 import sys
 import argparse
 import tweepy
+import json
 from datetime import datetime
 
 # --- Logging ---
@@ -144,6 +145,73 @@ def post_tweet(text):
         log(f"Tweepy Error: {e}")
         print(f"Error posting tweet: {e}")
 
+def handle_auth(pin=None):
+    consumer_key = os.environ.get('X_KEY')
+    consumer_secret = os.environ.get('X_SECRET')
+    
+    if not consumer_key or not consumer_secret:
+        log("Error: Missing Consumer Keys (X_KEY, X_SECRET)")
+        print("Error: X_KEY and X_SECRET must be set to start authentication.")
+        sys.exit(1)
+
+    oauth_file = '.twitter_oauth_token'
+
+    if pin:
+        # Complete Auth
+        if not os.path.exists(oauth_file):
+            print("Error: No pending authentication found. Run 'auth' without --pin first.")
+            sys.exit(1)
+            
+        try:
+            with open(oauth_file, 'r') as f:
+                request_token = json.load(f)
+        except Exception as e:
+             print(f"Error reading pending auth data: {e}")
+             sys.exit(1)
+
+        try:
+            auth = tweepy.OAuth1UserHandler(
+                consumer_key, consumer_secret
+            )
+            auth.request_token = request_token
+            
+            access_token, access_token_secret = auth.get_access_token(pin)
+            
+            print("Authentication Successful!")
+            print("Add these to your environment variables:")
+            print(f"X_OAUTH_ID={access_token}")
+            print(f"X_OAUTH_SECRET={access_token_secret}")
+            
+            os.remove(oauth_file)
+            
+        except tweepy.TweepyException as e:
+            print(f"Authentication failed: {e}")
+            sys.exit(1)
+
+    else:
+        # Start Auth
+        try:
+            auth = tweepy.OAuth1UserHandler(consumer_key, consumer_secret)
+            try:
+                url = auth.get_authorization_url()
+            except tweepy.TweepyException as e:
+                print(f"Error getting authorization URL: {e}")
+                sys.exit(1)
+                
+            # Save request_token
+            with open(oauth_file, 'w') as f:
+                json.dump(auth.request_token, f)
+                
+            print("Please visit this URL to authorize the app:")
+            print(url)
+            print("\nAfter authorizing, run this command with the PIN you receive:")
+            print("python3 skills/twitter/twitter.py auth --pin <PIN_CODE>")
+            
+        except Exception as e:
+            log(f"Error starting auth: {e}")
+            print(f"Error: {e}")
+            sys.exit(1)
+
 # --- Main ---
 def main():
     parser = argparse.ArgumentParser(description="Twitter CLI Skill (Tweepy)")
@@ -167,6 +235,10 @@ def main():
     parser_post = subparsers.add_parser("post", help="Post a tweet")
     parser_post.add_argument("text", type=str, help="Tweet text")
 
+    # auth
+    parser_auth = subparsers.add_parser("auth", help="Authenticate with Twitter")
+    parser_auth.add_argument("--pin", type=str, help="PIN from authorization URL")
+
     args = parser.parse_args()
 
     if args.command == "timeline":
@@ -186,6 +258,8 @@ def main():
         search_tweets(args.query, args.limit)
     elif args.command == "post":
         post_tweet(args.text)
+    elif args.command == "auth":
+        handle_auth(args.pin)
     else:
         parser.print_help()
 

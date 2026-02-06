@@ -21,7 +21,7 @@ CLI tool for Gmail via Official Google API (Python).
 
 ## Setup
 
-The following environment variables are required and should be set in your environment:
+The following environment variables are available and are set in the environment:
 
 - `GMAIL_CLIENT_ID`: Your OAuth Client ID
 - `GMAIL_CLIENT_SECRET`: Your OAuth Client Secret
@@ -31,10 +31,15 @@ The skill relies exclusively on these environment variables for authentication.
 
 ## Usage
 
-This skill is a single Python script (`gmail.py`) using `google-api-python-client` installed in the Clawdbot Python environment (`${CLAWDBOT_PYTHON_VENV}`).
+This skill is a single Python script (`gmail.py`) using `google-api-python-client` (can be installed via `pip` using:
+
+# Setup python venv ~/.python-venv
+
+- `python3 -m venv ~/.python-venv`
+- `~/.python-venv/bin/pip install google-api-python-client`
 
 ```bash
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py <command> [args]
+~/.python-venv/bin/python3 skills/gmail/gmail.py <command> [args]
 ```
 
 **Commands:**
@@ -49,18 +54,18 @@ ${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py <command> [args]
 
 ```bash
 # List unread
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py unread
+~/.python-venv/bin/python3 skills/gmail/gmail.py unread
 
 # Search
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py search --limit 5 "subject:invoice"
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py search "from:amazon newer:2d" --limit 20
+~/.python-venv/bin/python3 skills/gmail/gmail.py search --limit 5 "subject:invoice"
+~/.python-venv/bin/python3 skills/gmail/gmail.py search "from:amazon newer:2d" --limit 20
 
 # Read
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py read 193b218a...
+~/.python-venv/bin/python3 skills/gmail/gmail.py read 193b218a...
 
 # Send
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py send recipient@example.com "Subject Here" "Body content goes here"
+~/.python-venv/bin/python3 skills/gmail/gmail.py send recipient@example.com "Subject Here" "Body content goes here"
 
 # Scrape amounts
-${CLAWDBOT_PYTHON_VENV}/bin/python3 skills/gmail/gmail.py
+~/.python-venv/bin/python3 skills/gmail/gmail.py
 ```
