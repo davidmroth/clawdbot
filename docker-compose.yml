@@ -27,6 +27,22 @@ services:
         "${CLAWDBOT_GATEWAY_PORT:-18789}",
       ]
 
+  qmd:
+    container_name: qmd
+    build:
+      context: ./qmd
+    image: qmd:local
+    ports:
+      - "${QMD_PORT:-8100}:8100"
+    volumes:
+      - qmd-data:/data/qmd
+    init: true
+    restart: unless-stopped
+    environment:
+      QMD_EMBED_MODEL_PATH: /app/qmd-models/nomic-embed-text-v1.5.Q4_K_M.gguf
+      QMD_DATA_DIR: /data/qmd
+      QMD_CONFIG_DIR: /data/qmd/config
+
   clawdbot-cli:
     container_name: cli
     build:
@@ -43,3 +59,6 @@ services:
     tty: true
     init: true
     entrypoint: ["node", "dist/index.js"]
+
+volumes:
+  qmd-data:
