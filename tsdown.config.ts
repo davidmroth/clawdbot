@@ -10,6 +10,8 @@ export default defineConfig({
     "src/entry.ts",
     "src/plugin-sdk/index.ts",
     "src/extensionAPI.ts",
+    "src/agents/pi-extensions/compaction-safeguard.ts",
+    "src/agents/pi-extensions/context-pruning.ts",
   ],
   outDir: "dist",
   clean: true,

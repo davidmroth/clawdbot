@@ -14,6 +14,11 @@ import { ensurePiCompactionReserveTokens } from "../pi-settings.js";
 import { isCacheTtlEligibleProvider, readLastCacheTtlTimestamp } from "./cache-ttl.js";
 
 function resolvePiExtensionPath(id: string): string {
+  // If we are in the Docker container, we know exactly where things are.
+  if (process.env.CLAWDBOT_EXTENSIONS_DIR) {
+      return path.join(process.env.CLAWDBOT_EXTENSIONS_DIR, `${id}.js`);
+  }
+  
   const self = fileURLToPath(import.meta.url);
   const dir = path.dirname(self);
   // In dev this file is `.ts` (tsx), in production it's `.js`.
