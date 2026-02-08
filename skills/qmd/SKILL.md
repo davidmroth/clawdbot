@@ -1,46 +1,45 @@
 ---
 name: qmd
-description: Search personal markdown knowledge bases, notes, meeting transcripts, and documentation using QMD - a local hybrid search engine. Combines BM25 keyword search, vector semantic search, and hybrid RRF fusion. Use when users ask to search notes, find documents, look up information in their knowledge base, retrieve meeting notes, or search documentation. Triggers on "search markdown files", "search my notes", "find in docs", "look up", "what did I write about", "meeting notes about" (based on https://github.com/tobi/qmd).
+description: Add content to and search personal markdown knowledge bases using QMD — a local hybrid search microservice. You CAN add content by registering collections (directories of markdown files), indexing them, and generating embeddings. You CAN search using keyword (BM25), semantic (vector), or hybrid (RRF) search. Use when users ask to search notes, find documents, add documents to their knowledge base, index a directory, "search my notes", "find in docs", "what did I write about", or "add this to my knowledge base" (based on https://github.com/tobi/qmd).
 license: MIT
 metadata:
   author: davidmroth
-  version: "2.0"
+  version: "2.1"
 allowed-tools: Bash(qmd:*),Bash(curl:*)
 ---
 
-# QMD - Quick Markdown Search
+# QMD — Quick Markdown Search
 
-QMD is a local, on-device search engine for markdown content. It runs as a microservice and indexes your notes, meeting transcripts, documentation, and knowledge bases for fast retrieval.
+QMD is a local search microservice at `http://localhost:8100`. All responses are JSON.
+It can **add, index, and search** markdown content. It does NOT auto-discover content — you must set it up.
 
-## Service
+## Capabilities
 
-QMD runs as an HTTP microservice. The base URL defaults to `http://localhost:8100`.
-All endpoints accept an optional `X-Instance-ID` header to scope data per Clawdbot instance.
+You can do ALL of the following with QMD:
 
-## When to Use This Skill
+- **Add content**: register a directory of markdown files as a collection
+- **Index content**: scan files, chunk them, and store in full-text search index
+- **Embed content**: generate vector embeddings for semantic search
+- **Search content**: keyword, semantic, or hybrid search across indexed collections
+- **Retrieve documents**: fetch full document content by path
+- **Manage collections**: add, list, or remove collections
+- **Re-index**: update the index when files on disk change
 
-- User asks to search their notes, documents, or knowledge base
-- User needs to find information in their markdown files
-- User wants to retrieve specific documents or search across collections
-- User asks "what did I write about X" or "find my notes on Y"
-- User needs semantic search (conceptual similarity) not just keyword matching
-- User mentions meeting notes, transcripts, or documentation lookup
+## Adding Content (Content Lifecycle)
 
-## Content Lifecycle
+QMD requires a 3-step setup before search works. Always check status first.
 
-QMD does NOT discover content automatically. You must register collections, index them, and generate embeddings before search works.
-
-### Step 1: Check if anything is indexed
+### 1. Check if anything is indexed
 
 ```bash
 curl -s "http://localhost:8100/status"
 ```
 
-If `total_documents` is 0 or `indexed` is false, you need to set up collections first.
+If `total_documents` is 0 or `indexed` is false, continue to step 2.
 
-### Step 2: Register a collection
+### 2. Register a collection
 
-A collection maps a name to a directory on disk and a file glob pattern.
+A collection maps a name to a directory on disk and a file glob pattern. This tells QMD where to find files.
 
 ```bash
 curl -s -X POST "http://localhost:8100/collections" \
@@ -48,106 +47,95 @@ curl -s -X POST "http://localhost:8100/collections" \
   -d '{"name": "docs", "path": "/home/node/clawd/docs", "pattern": "**/*.md"}'
 ```
 
-### Step 3: Index the collection (scan files into FTS)
+Common collections to register:
+- `docs` → `/home/node/clawd/docs` (project documentation)
+- `skills` → `/home/node/clawd/skills` (skill files)
+- `notes` → user's notes directory
+
+### 3. Index and embed the collection
+
+Indexing scans files into the full-text search index. Embedding generates vectors for semantic search. Both are required.
 
 ```bash
+# Index (scan files, chunk, store in FTS)
 curl -s -X POST "http://localhost:8100/index" \
   -H "Content-Type: application/json" \
   -d '{"collection": "docs"}'
-```
 
-### Step 4: Generate vector embeddings
-
-```bash
+# Embed (generate vectors — run after indexing)
 curl -s -X POST "http://localhost:8100/embed" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
 
-### Re-indexing
+### Re-indexing after changes
 
-When files on disk change, re-run Step 3 and Step 4 to update the index. Only changed files are re-processed.
+When files on disk change, re-run index + embed. Only changed files are re-processed.
 
-## Search Endpoints
-
-Choose the right search mode for the task:
-
-| Endpoint      | Use When                                         | Speed  |
-| ------------- | ------------------------------------------------ | ------ |
-| `GET /fts`    | Exact keyword matches needed                     | Fast   |
-| `GET /vsearch`| Keywords aren't working, need conceptual matches | Medium |
-| `GET /search` | Best results needed (hybrid RRF)                 | Slower |
-
-### Hybrid search (best quality)
 ```bash
-curl "http://localhost:8100/search?q=your+query&n=10"
+curl -s -X POST "http://localhost:8100/index" -H "Content-Type: application/json" -d '{"collection": "docs"}'
+curl -s -X POST "http://localhost:8100/embed" -H "Content-Type: application/json" -d '{}'
 ```
 
-### Keyword search (BM25)
+## Searching Content
+
+| Endpoint       | Use When                                         | Speed  |
+| -------------- | ------------------------------------------------ | ------ |
+| `GET /search`  | Best results needed (hybrid RRF, recommended)    | Medium |
+| `GET /fts`     | Exact keyword matches needed                     | Fast   |
+| `GET /vsearch` | Need conceptual/semantic matches                 | Medium |
+
 ```bash
-curl "http://localhost:8100/fts?q=your+query&n=10"
+# Hybrid search (recommended — combines keyword + semantic)
+curl -s "http://localhost:8100/search?q=your+query&n=10"
+
+# Keyword search (BM25/FTS5)
+curl -s "http://localhost:8100/fts?q=your+query&n=10"
+
+# Semantic vector search
+curl -s "http://localhost:8100/vsearch?q=your+query&n=10"
+
+# Filter by collection
+curl -s "http://localhost:8100/search?q=your+query&collection=docs&n=10"
 ```
 
-### Semantic vector search
-```bash
-curl "http://localhost:8100/vsearch?q=your+query&n=10"
-```
+Query parameters: `q` (required), `n` (default 10), `collection` (optional filter).
 
-### Filter by collection
-```bash
-curl "http://localhost:8100/search?q=your+query&collection=notes"
-```
-
-## Common Query Parameters
-
-| Param        | Default | Description                       |
-| ------------ | ------- | --------------------------------- |
-| `q`          | —       | Search query (required)           |
-| `n`          | 10      | Number of results                 |
-| `collection` | —       | Restrict to specific collection   |
-
-## Document Retrieval
+## Retrieving Documents
 
 ```bash
 # Get document by path
-curl "http://localhost:8100/doc/collection/path/to/doc.md"
+curl -s "http://localhost:8100/doc/docs/configuration.md"
 
 # Get with line numbers
-curl "http://localhost:8100/doc/docs/api.md?line_numbers=true"
+curl -s "http://localhost:8100/doc/docs/api.md?line_numbers=true"
 ```
 
-## Index Management
+## Managing Collections
 
 ```bash
-# Check index status and available collections
-curl "http://localhost:8100/status"
-
 # List all collections
-curl "http://localhost:8100/collections"
+curl -s "http://localhost:8100/collections"
 
-# Index files from all collections
-curl -X POST "http://localhost:8100/index" -H "Content-Type: application/json" -d '{}'
-
-# Index a specific collection
-curl -X POST "http://localhost:8100/index" -H "Content-Type: application/json" -d '{"collection": "notes"}'
-
-# Generate embeddings
-curl -X POST "http://localhost:8100/embed" -H "Content-Type: application/json" -d '{}'
-
-# Force re-embed all documents
-curl -X POST "http://localhost:8100/embed" -H "Content-Type: application/json" -d '{"force": true}'
-```
-
-## Collection Management
-
-```bash
 # Add a collection
-curl -X POST "http://localhost:8100/collections" \
+curl -s -X POST "http://localhost:8100/collections" \
   -H "Content-Type: application/json" \
   -d '{"name": "notes", "path": "/data/notes", "pattern": "**/*.md"}'
 
 # Remove a collection
-curl -X DELETE "http://localhost:8100/collections/notes"
+curl -s -X DELETE "http://localhost:8100/collections/notes"
+
+# Force re-embed everything
+curl -s -X POST "http://localhost:8100/embed" \
+  -H "Content-Type: application/json" -d '{"force": true}'
+```
+
+## Multi-Instance Support
+
+Add `X-Instance-ID` header to scope data per Clawdbot instance. Each instance gets its own database.
+
+```bash
+curl -s -H "X-Instance-ID: my-bot" "http://localhost:8100/status"
 ```
 
 ## Score Interpretation
@@ -159,25 +147,10 @@ curl -X DELETE "http://localhost:8100/collections/notes"
 | 0.2 - 0.5 | Somewhat relevant   | Only if user wants more |
 | 0.0 - 0.2 | Low relevance       | Usually skip            |
 
-## Recommended Workflow
+## Workflow Summary
 
-1. **Check status**: `curl http://localhost:8100/status` — if empty, set up collections first
-2. **Register collections** (first time only): `POST /collections` with name, path, pattern
-3. **Index + embed** (first time or after file changes): `POST /index` then `POST /embed`
-4. **Search**: `curl "http://localhost:8100/search?q=question&n=10"` (hybrid, best quality)
-5. **Retrieve full documents**: `curl "http://localhost:8100/doc/collection/path.md"`
-
-## CLI Wrapper
-
-A thin CLI wrapper (`qmd`) is also available for backward compatibility:
-
-```bash
-qmd search "your query"       # → GET /search
-qmd vsearch "your query"      # → GET /vsearch
-qmd fts "your query"          # → GET /fts
-qmd get "path/to/doc.md"      # → GET /doc/{path}
-qmd status                    # → GET /status
-qmd index                     # → POST /index
-qmd embed                     # → POST /embed
-qmd collections               # → GET /collections
-```
+1. `GET /status` — check if index exists; if empty, set up collections
+2. `POST /collections` — register directories to index (first time only)
+3. `POST /index` then `POST /embed` — populate index (first time + after file changes)
+4. `GET /search?q=...` — search (hybrid recommended)
+5. `GET /doc/{path}` — retrieve full document content

@@ -2,7 +2,6 @@ import { formatCliCommand } from "../cli/command-format.js";
 import type { ClawdbotConfig } from "../config/config.js";
 import { readConfigFileSnapshot, resolveGatewayPort, writeConfigFile } from "../config/config.js";
 import { logConfigUpdated } from "../config/logging.js";
-import { ensureControlUiAssetsBuilt } from "../infra/control-ui-assets.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
 import { note } from "../terminal/note.js";
@@ -538,11 +537,6 @@ export async function runConfigureWizard(
       }
     }
 
-    const controlUiAssets = await ensureControlUiAssetsBuilt(runtime);
-    if (!controlUiAssets.ok && controlUiAssets.message) {
-      runtime.error(controlUiAssets.message);
-    }
-
     const bind = nextConfig.gateway?.bind ?? "loopback";
     const links = resolveControlUiLinks({
       bind,
@@ -574,12 +568,10 @@ export async function runConfigureWizard(
 
     note(
       [
-        `Web UI: ${links.httpUrl}`,
-        `Gateway WS: ${links.wsUrl}`,
+        `API: ${links.wsUrl}`,
         gatewayStatusLine,
-        "Docs: https://docs.clawd.bot/web/control-ui",
       ].join("\n"),
-      "Control UI",
+      "Gateway Ready",
     );
 
     outro("Configure complete.");

@@ -27,18 +27,6 @@ services:
         "${CLAWDBOT_GATEWAY_PORT:-18789}",
       ]
 
-  qmd:
-    container_name: qmd
-    build:
-      context: ./qmd
-    image: qmd:local
-    ports:
-      - "${QMD_PORT:-8100}:8100"
-    volumes:
-      - qmd-data:/data/qmd
-    init: true
-    restart: unless-stopped
-
   clawdbot-cli:
     container_name: cli
     build:

@@ -70,18 +70,17 @@ function formatGatewayAuthFailureMessage(params: {
 }): string {
   const { authMode, authProvided, reason, client } = params;
   const isCli = isGatewayCliClient(client);
-  const isControlUi = client?.id === GATEWAY_CLIENT_IDS.CONTROL_UI;
   const isWebchat = isWebchatClient(client);
-  const uiHint = "open a tokenized dashboard URL or paste token in Control UI settings";
+  const uiHint = "open a tokenized dashboard URL";
   const tokenHint = isCli
     ? "set gateway.remote.token to match gateway.auth.token"
-    : isControlUi || isWebchat
+    : isWebchat
       ? uiHint
       : "provide gateway auth token";
   const passwordHint = isCli
     ? "set gateway.remote.password to match gateway.auth.password"
-    : isControlUi || isWebchat
-      ? "enter the password in Control UI settings"
+    : isWebchat
+      ? "enter the password"
       : "provide gateway auth password";
   switch (reason) {
     case "token_missing":

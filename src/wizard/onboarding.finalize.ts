@@ -11,19 +11,16 @@ import { healthCommand } from "../commands/health.js";
 import { formatHealthCheckFailure } from "../commands/health-format.js";
 import {
   detectBrowserOpenSupport,
-  formatControlUiSshHint,
   openUrl,
   openUrlInBackground,
   probeGatewayReachable,
   waitForGatewayReachable,
-  resolveControlUiLinks,
 } from "../commands/onboard-helpers.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { OnboardOptions } from "../commands/onboard-types.js";
 import type { ClawdbotConfig } from "../config/config.js";
 import { resolveGatewayService } from "../daemon/service.js";
 import { isSystemdUserServiceAvailable } from "../daemon/systemd.js";
-import { ensureControlUiAssetsBuilt } from "../infra/control-ui-assets.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { runTui } from "../tui/tui.js";
 import { resolveUserPath } from "../utils.js";

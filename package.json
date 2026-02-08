@@ -77,7 +77,7 @@
   "scripts": {
     "dev": "node scripts/run-node.mjs",
     "postinstall": "node scripts/postinstall.js",
-    "prepack": "pnpm build && pnpm ui:build",
+    "prepack": "pnpm build",
     "docs:list": "node scripts/docs-list.js",
     "docs:bin": "node scripts/build-docs-list.mjs",
     "docs:dev": "cd docs && mint dev",
@@ -85,9 +85,6 @@
     "build": "tsdown && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/write-build-info.ts",
     "plugins:sync": "node --import tsx scripts/sync-plugin-versions.ts",
     "release:check": "node --import tsx scripts/release-check.ts",
-    "ui:install": "node scripts/ui.js install",
-    "ui:dev": "node scripts/ui.js dev",
-    "ui:build": "node scripts/ui.js build",
     "start": "node scripts/run-node.mjs",
     "clawdbot": "node scripts/run-node.mjs",
     "gateway:watch": "node scripts/watch-node.mjs gateway --force",

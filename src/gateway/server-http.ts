@@ -13,7 +13,6 @@ import { loadConfig } from "../config/config.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
 import { handleSlackHttpRequest } from "../slack/http/index.js";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
-import { handleControlUiAvatarRequest, handleControlUiHttpRequest } from "./control-ui.js";
 import {
   extractHookToken,
   getHookChannelError,
@@ -160,7 +159,7 @@ export function createHooksRequestHandler(
             res.end();
             return true;
           }
-          if (mapped.action.kind === "wake") {
+    if (mapped.action.kind === "wake") {
             dispatchWakeHook({
               text: mapped.action.text,
               mode: mapped.action.mode,
@@ -205,8 +204,6 @@ export function createHooksRequestHandler(
 
 export function createGatewayHttpServer(opts: {
   canvasHost: CanvasHostHandler | null;
-  controlUiEnabled: boolean;
-  controlUiBasePath: string;
   openAiChatCompletionsEnabled: boolean;
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
@@ -217,8 +214,6 @@ export function createGatewayHttpServer(opts: {
 }): HttpServer {
   const {
     canvasHost,
-    controlUiEnabled,
-    controlUiBasePath,
     openAiChatCompletionsEnabled,
     openResponsesEnabled,
     openResponsesConfig,
@@ -300,26 +295,6 @@ export function createGatewayHttpServer(opts: {
         if (await handleA2uiHttpRequest(req, res)) return;
         if (await canvasHost.handleHttpRequest(req, res)) return;
       }
-      if (controlUiEnabled) {
-        if (
-          handleControlUiAvatarRequest(req, res, {
-            basePath: controlUiBasePath,
-            resolveAvatar: (agentId) => resolveAgentAvatar(configSnapshot, agentId),
-          })
-        )
-          return;
-        if (
-          handleControlUiHttpRequest(req, res, {
-            basePath: controlUiBasePath,
-            config: configSnapshot,
-          })
-        )
-          return;
-      }
-
-      res.statusCode = 404;
-      res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.end("Not Found");
     } catch (err) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
