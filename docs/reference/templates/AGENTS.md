@@ -56,7 +56,7 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 ## External vs Internal
 
 **Safe to do freely:**
-- Read files, explore, organize, learn
+- Read files, explore, organize, learn, search memories
 - Search the web, check calendars
 - Work within this workspace
 
