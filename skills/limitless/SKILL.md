@@ -1,6 +1,6 @@
 ---
 name: limitless
-description: Access Limitless Pendant data (Lifelogs) to search and retrieve memories, conversations, meetings, and audio transcripts.
+description: Access daily daily life diary to search and retrieve memories, conversations, meetings, and audio transcripts.
 metadata: { "clawdbot": { "emoji": "🧠", "env": ["LIMITLESS_API_KEY"] } }
 ---
 
@@ -11,7 +11,7 @@ Integration with the Limitless Developer API to access Lifelogs.
 ## Configuration
 
 Requires an API Key.
-Check/set environment variable `LIMITLESS_API_KEY`.
+Environment variable is set via: `LIMITLESS_API_KEY`.
 
 ## Tools
 
@@ -39,7 +39,7 @@ node skills/limitless/index.js get "$id"
 
 ## Default Analysis (Chief of Staff Brief)
 
-After search/get, feed top transcript into this prompt for executive brief:
+After search/get, feed top transcript into the following prompt for executive brief:
 
 ```
 Act as a World-Class Chief of Staff trained in the high-velocity communication styles of Ray Dalio and Andy Grove. Your objective is to deconstruct a meeting transcript and extract raw signal from the noise.
@@ -120,10 +120,4 @@ If a deadline or owner is missing, flag it explicitly.
 Do not add assumptions. Only use what is in the transcript.
 
 Output must be executive-ready.
-
-
-
----
-
-Input Data:
 ```
