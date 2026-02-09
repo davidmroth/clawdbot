@@ -7,7 +7,8 @@ import { collectConfigEnvVars } from "../src/config/env-vars.js";
  * adding an escaped single quote, and reopening the quote.
  */
 function shellEscape(s: string) {
-  return "'" + s.replace(/'/g, "'\\''") + "'";
+  //return "'" + s.replace(/'/g, "'\\''") + "'";
+  return s.replace(/'/g, "'\\''");
 }
 
 try {
@@ -19,7 +20,7 @@ try {
 
   // Print each variable as an export command
   for (const [key, value] of Object.entries(envVars)) {
-    process.stdout.write(`export ${key}=${shellEscape(value)}\n`);
+    process.stdout.write(`${key}=${shellEscape(value)}\n`);
   }
 } catch (error) {
   console.error("Failed to load config for environment export:", error);
