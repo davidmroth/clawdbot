@@ -53,13 +53,13 @@ ENV NODE_ENV=production
 ENV TZ=America/Chicago
 ENV CLAWDBOT_PYTHON_VENV="/opt/python-env"
 
-# install pip
+# Install pip
 RUN apt-get update && \
-DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y --no-install-recommends \
-    lsof python3-pip python3.11-venv && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get install -y --no-install-recommends \
+  lsof python3-pip python3.11-venv && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 RUN wget https://github.com/asg017/sqlite-vec/releases/download/v0.1.7-alpha.2/sqlite-vec-0.1.7-alpha.2-loadable-linux-x86_64.tar.gz -O /tmp/sqlite-vec.tar.gz && \
   tar -xzf /tmp/sqlite-vec.tar.gz -C /tmp && \
@@ -74,18 +74,24 @@ COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /opt/python-env ${CLAWDBOT_PYTHON_VENV}
 
-RUN mkdir src
-RUN mkdir -p ./dist/control-ui
-RUN chown -R node:node ./src
-RUN chown -R node:node ./dist
+# Install clawdbot-bash wrapper that ensures Python venv is first in PATH
+COPY ./scripts/clawdbot-bash.sh /usr/local/bin/clawdbot-bash
+RUN chmod +x /usr/local/bin/clawdbot-bash
 
+# Install env.sh for setting environment variables in bash sessions
+COPY ./scripts/env.sh /usr/local/bin/env.sh
+RUN chmod +x /usr/local/bin/env.sh
+
+# Install dev dependencies for debugging
 RUN npm install -g pnpm
 RUN echo "#!/bin/bash\n/usr/local/bin/node /app/dist/index.js $@" > /usr/local/bin/clawdbot
 RUN chmod +x /usr/local/bin/clawdbot
 
-# Install clawdbot-bash wrapper that ensures Python venv is first in PATH
-COPY scripts/clawdbot-bash.sh /usr/local/bin/clawdbot-bash
-RUN chmod +x /usr/local/bin/clawdbot-bash
+# Set permissions for runtime directories (is this really necessary?
+RUN mkdir src
+RUN mkdir -p ./dist/control-ui
+RUN chown -R node:node ./src
+RUN chown -R node:node ./dist
 
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)
@@ -93,8 +99,8 @@ RUN chmod +x /usr/local/bin/clawdbot-bash
 USER node
 
 RUN echo 'alias ll="ls -lahk --color=auto --group-directories-first"' >> ~/.bashrc
-
 CMD ["node", "dist/index.js"]
+
 
 #
 # RUNTIME
@@ -108,7 +114,7 @@ ENV NODE_ENV=production
 ENV TZ=America/Chicago
 ENV CLAWDBOT_PYTHON_VENV="/opt/python-env"
 
-# install pip
+# Install pip
 RUN apt-get update && \
 DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends \
@@ -129,13 +135,19 @@ COPY --from=builder /app/docs ./docs
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /opt/python-env ${CLAWDBOT_PYTHON_VENV}
 
+# Install clawdbot-bash wrapper that ensures Python venv is first in PATH
+COPY ./scripts/clawdbot-bash.sh /usr/local/bin/clawdbot-bash
+RUN chmod +x /usr/local/bin/clawdbot-bash
+
+# Install dev dependencies for debugging
+RUN npm install -g pnpm
+RUN echo "#!/bin/bash\n/usr/local/bin/node /app/dist/index.js $@" > /usr/local/bin/clawdbot
+RUN chmod +x /usr/local/bin/clawdbot
+
+# Set permissions for runtime directories (is this really necessary?)
 RUN mkdir src
 RUN chown -R node:node ./src
 RUN chown -R node:node ./dist
-
-RUN npm install -g pnpm
-RUN echo "#!/bin/bash\n/usr/local/bin/node /app/dist/index.js \$@" > /usr/local/bin/clawdbot
-RUN chmod +x /usr/local/bin/clawdbot
 
 # Install clawdbot-bash wrapper that ensures Python venv is first in PATH
 COPY scripts/clawdbot-bash.sh /usr/local/bin/clawdbot-bash
