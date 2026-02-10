@@ -15,6 +15,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import { fetchRecentInsights } from "../../qmd-client.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { resolveTelegramInlineButtonsScope } from "../../../telegram/inline-buttons.js";
@@ -224,7 +225,25 @@ export async function runEmbeddedAttempt(
       (file) => file.name === DEFAULT_BOOTSTRAP_FILENAME && !file.missing,
     )
       ? ["Reminder: commit your changes in this workspace after edits."]
-      : undefined;
+      : [];
+
+    // Phase 4: Mid-Turn Context Injection (Ah-Ha! Insights)
+    if (!isSubagentSessionKey(params.sessionKey)) {
+      try {
+        const insights = await fetchRecentInsights(5);
+        if (insights.length > 0) {
+           workspaceNotes.push("## QMD Memory Insights");
+           for (const item of insights) {
+              const scorePct = Math.round(item.score * 100);
+              const related = item.details?.match?.title || "Unknown";
+              const note = `- [Recent Insight] Context: "${item.trigger.slice(0, 60)}..." likely relates to "${related}" (Confidence: ${scorePct}%)`;
+              workspaceNotes.push(note);
+           }
+        }
+      } catch (e) {
+         // QMD likely disabled or unreachable
+      }
+    }
 
     const agentDir = params.agentDir ?? resolveClawdbotAgentDir();
 
