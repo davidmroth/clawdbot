@@ -71,13 +71,14 @@ async function request(endpoint, params = {}) {
   });
 }
 
-async function search(query, date, limit) {
+async function search(query, date, limit, timezone) {
   try {
     const params = {
       q: query,
       limit: limit || 3
     };
     if (date) params.date = date;
+    if (timezone) params.timezone = timezone;
 
     const result = await request('/lifelogs', params);
     
@@ -118,10 +119,11 @@ if (command === 'search') {
   let date;
   let limitStr = args[3] || '3';
   const limit = parseInt(limitStr, 10);
+  const timezone = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
   if (args[2] && !args[2].startsWith('--')) {
     date = args[2];
   }
-  search(query, date, limit);
+  search(query, date, limit, timezone);
 } else if (command === 'get') {
   const id = args[1];
   get(id);

@@ -15,6 +15,9 @@ Environment variable is set via: `LIMITLESS_API_KEY`.
 
 ## Tools
 
+### Command:
+`node skills/limitless/index.js [tool] [args]`
+
 ### search
 
 Search for lifelogs using semantic query, date, or keywords.
