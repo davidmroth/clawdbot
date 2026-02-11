@@ -727,8 +727,14 @@ export async function runEmbeddedAttempt(
       } = subscription;
 
       const queueHandle: EmbeddedPiQueueHandle = {
-        queueMessage: async (text: string) => {
-          await activeSession.steer(text);
+        queueMessage: async (text: string, role: "user" | "system" = "user") => {
+          if (role === "system") {
+            // Inject system message directly into history so it's included in next context window
+            activeSession.messages.push({ role: "system", content: text });
+            activeSession.agent.replaceMessages(activeSession.messages);
+          } else {
+            await activeSession.steer(text);
+          }
         },
         isStreaming: () => activeSession.isStreaming,
         isCompacting: () => subscription.isCompacting(),
@@ -900,7 +906,15 @@ export async function runEmbeddedAttempt(
               }),
             );
           } else {
-            await abortable(activeSession.prompt(effectivePrompt));
+            const heartbeatText = resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt);
+            if (effectivePrompt === heartbeatText) {
+              // Inject heartbeat as system message so it doesn't appear as a user message in UI
+              activeSession.messages.push({ role: "system", content: effectivePrompt });
+              activeSession.agent.replaceMessages(activeSession.messages);
+              await abortable(activeSession.run());
+            } else {
+              await abortable(activeSession.prompt(effectivePrompt));
+            }
           }
         } catch (err) {
           promptError = err;

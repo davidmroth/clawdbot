@@ -5,7 +5,7 @@ import {
 } from "../../logging/diagnostic.js";
 
 type EmbeddedPiQueueHandle = {
-  queueMessage: (text: string) => Promise<void>;
+  queueMessage: (text: string, role?: "user" | "system") => Promise<void>;
   isStreaming: () => boolean;
   isCompacting: () => boolean;
   abort: () => void;
@@ -18,7 +18,11 @@ type EmbeddedRunWaiter = {
 };
 const EMBEDDED_RUN_WAITERS = new Map<string, Set<EmbeddedRunWaiter>>();
 
-export function queueEmbeddedPiMessage(sessionId: string, text: string): boolean {
+export function queueEmbeddedPiMessage(
+  sessionId: string, 
+  text: string, 
+  role: "user" | "system" = "user"
+): boolean {
   const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
   if (!handle) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=no_active_run`);
@@ -33,7 +37,7 @@ export function queueEmbeddedPiMessage(sessionId: string, text: string): boolean
     return false;
   }
   logMessageQueued({ sessionId, source: "pi-embedded-runner" });
-  void handle.queueMessage(text);
+  void handle.queueMessage(text, role);
   return true;
 }
 

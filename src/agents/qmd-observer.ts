@@ -122,7 +122,7 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
       `Please consider this context in your response.`,
     ].join("\n");
 
-    const queued = queueEmbeddedPiMessage(sessionKey, recallMessage);
+    const queued = queueEmbeddedPiMessage(sessionKey, recallMessage, "system");
     if (queued) {
       recalledSessions.add(sessionKey);
       log.info("Memory recall injected", { sessionKey, path, score: score.toFixed(3) });
