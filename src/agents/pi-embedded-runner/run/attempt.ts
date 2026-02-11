@@ -11,6 +11,7 @@ import {
 } from "@mariozechner/pi-coding-agent";
 
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
+import { BARE_SESSION_RESET_PROMPT } from "../../../auto-reply/reply/get-reply-run.js";
 import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
@@ -740,7 +741,7 @@ export async function runEmbeddedAttempt(
         isCompacting: () => subscription.isCompacting(),
         abort: abortRun,
       };
-      setActiveEmbeddedRun(params.sessionId, queueHandle);
+      setActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
 
       let abortWarnTimer: NodeJS.Timeout | undefined;
       const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
@@ -894,7 +895,10 @@ export async function runEmbeddedAttempt(
           // Post the user's query to QMD for realtime recall matching.
           // The user's question is more relevant for memory search than the LLM response.
           if (effectivePrompt.length >= 10) {
-            void postSnippet(params.sessionId, effectivePrompt);
+            void postSnippet(params.sessionKey ?? params.sessionId, effectivePrompt);
+            // Give QMD a moment to search and broadcast a signal before we lock in the LLM context.
+            // This small race-condition buffer ensures "Ah-Ha" moments are included in *this* turn.
+            await new Promise(resolve => setTimeout(resolve, 800));
           }
 
           // Only pass images option if there are actually images to pass
@@ -908,10 +912,11 @@ export async function runEmbeddedAttempt(
           } else {
             const heartbeatText = resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt);
             if (effectivePrompt === heartbeatText) {
-              // Inject heartbeat as system message so it doesn't appear as a user message in UI
+              // Inject heartbeat instruction as a system message so it's not visible as a user turn.
+              // Then trigger the LLM with a minimal user prompt so it actually processes the instruction.
               activeSession.messages.push({ role: "system", content: effectivePrompt });
               activeSession.agent.replaceMessages(activeSession.messages);
-              await abortable(activeSession.run());
+              await abortable(activeSession.prompt("[heartbeat]"));
             } else {
               await abortable(activeSession.prompt(effectivePrompt));
             }
@@ -970,9 +975,12 @@ export async function runEmbeddedAttempt(
         clearTimeout(abortTimer);
         if (abortWarnTimer) clearTimeout(abortWarnTimer);
         unsubscribe();
-        clearActiveEmbeddedRun(params.sessionId, queueHandle);
-        // Phase 3: Reset recall state for this session
+        clearActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
+        // Phase 3: Reset recall state for this session (clear both keys to avoid leaks)
         resetRecallForSession(params.sessionId);
+        if (params.sessionKey && params.sessionKey !== params.sessionId) {
+          resetRecallForSession(params.sessionKey);
+        }
         void resetSnippetSession(params.sessionKey ?? params.sessionId);
         params.abortSignal?.removeEventListener?.("abort", onAbort);
       }

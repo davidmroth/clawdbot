@@ -51,9 +51,14 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
           const data = JSON.parse(event.data as string);
           // Only forward actual events, filter pongs/acks if needed
           if (data.type === "pong" || data.type === "ack") return;
-          
+
           // Phase 3: Handle recall signals from snippet processor
           if (data.type === "snippet.signal") {
+            log.info("Received snippet.signal from QMD", {
+              sessionKey: data.data?.session_key,
+              score: data.data?.similarity_score,
+              path: data.data?.matched_path,
+            });
             handleRecallSignal(data.data, broadcaster);
           }
 
@@ -97,6 +102,7 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
       memory_tier?: string;
       matched_text?: string;
       matched_path?: string;
+      matched_content?: string;
       similarity_score?: number;
       session_key?: string;
     },
@@ -115,22 +121,30 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
     const path = signal.matched_path ?? "unknown";
     const title = signal.matched_text ?? "unknown";
     const tier = signal.memory_tier ?? "unknown";
+    const content = signal.matched_content;
 
-    const recallMessage = [
+    const recallLines = [
       `⚡ [MEMORY RECALL] A highly relevant memory was found in your knowledge base.`,
       `File: ${path} | Tier: ${tier} | Title: "${title}" | Confidence: ${Math.round(score * 100)}%`,
-      `Please consider this context in your response.`,
-    ].join("\n");
+    ];
+    if (content) {
+      recallLines.push(`--- BEGIN RECALLED CONTENT ---`, content, `--- END RECALLED CONTENT ---`);
+      recallLines.push(`Use the above content to inform your response.`);
+    } else {
+      recallLines.push(`You MUST read the file "${path}" using your file-read tool to retrieve the relevant context before responding.`);
+    }
+    const recallMessage = recallLines.join("\n");
 
+    log.debug("Attempting to queue recall message", { sessionKey, path, score: score.toFixed(3) });
     const queued = queueEmbeddedPiMessage(sessionKey, recallMessage, "system");
     if (queued) {
       recalledSessions.add(sessionKey);
       log.info("Memory recall injected", { sessionKey, path, score: score.toFixed(3) });
-      
+
       // Broadcast to UI for Cortex visualization
       broadcaster.broadcast("qmd/signal", signal);
     } else {
-      log.debug("Could not queue recall — no active run or not streaming", { sessionKey });
+      log.warn("Could not queue recall — no active run for session", { sessionKey });
     }
   }
 
