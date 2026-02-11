@@ -18,38 +18,11 @@ import {
   promoteThinkingTagsToBlocks,
 } from "./pi-embedded-utils.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
-import { postSnippet } from "./qmd-client.js";
-
 // --- QMD Snippet Streaming ---
-// Sliding window: post to QMD every ~200 chars of assistant output
-const QMD_SNIPPET_WINDOW = 200;
-const snippetBuffers = new Map<string, { chars: number; buffer: string }>();
-
-function maybePostSnippet(runId: string, sessionId: string, delta: string) {
-  let state = snippetBuffers.get(runId);
-  if (!state) {
-    state = { chars: 0, buffer: "" };
-    snippetBuffers.set(runId, state);
-  }
-  state.buffer += delta;
-  state.chars += delta.length;
-
-  if (state.chars >= QMD_SNIPPET_WINDOW) {
-    const text = state.buffer;
-    state.chars = 0;
-    // Keep last 50 chars for context overlap
-    state.buffer = text.slice(-50);
-    // Fire-and-forget
-    void postSnippet(sessionId, text);
-  }
-}
-
-export function flushSnippetBuffer(runId: string, sessionId: string) {
-  const state = snippetBuffers.get(runId);
-  if (state && state.buffer.length >= 30) {
-    void postSnippet(sessionId, state.buffer);
-  }
-  snippetBuffers.delete(runId);
+// Snippet posting moved to attempt.ts — user query is posted once at turn start
+// instead of streaming LLM response chunks.
+export function flushSnippetBuffer(_runId: string, _sessionId: string) {
+  // No-op: snippet posting now happens in attempt.ts with the user's query
 }
 
 export function handleMessageStart(
@@ -126,12 +99,6 @@ export function handleMessageUpdate(
     } else {
       ctx.state.blockBuffer += chunk;
     }
-
-    // Phase 3: Stream snippet to QMD for realtime recall
-    const sessionId = (ctx.params.session as { sessionId?: string }).sessionId;
-    if (sessionId) {
-      maybePostSnippet(ctx.params.runId, sessionId, chunk);
-    }
   }
 
   if (ctx.state.streamReasoning) {
@@ -200,12 +167,6 @@ export function handleMessageEnd(
 ) {
   const msg = evt.message;
   if (msg?.role !== "assistant") return;
-
-  // Phase 3: Flush remaining snippet buffer to QMD
-  const sessionId = (ctx.params.session as { sessionId?: string }).sessionId;
-  if (sessionId) {
-    flushSnippetBuffer(ctx.params.runId, sessionId);
-  }
 
   const assistantMessage = msg as AssistantMessage;
   promoteThinkingTagsToBlocks(assistantMessage);

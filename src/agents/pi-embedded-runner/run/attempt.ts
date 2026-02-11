@@ -90,7 +90,7 @@ import {
   setActiveEmbeddedRun,
 } from "../runs.js";
 import { resetRecallForSession } from "../../qmd-observer.js";
-import { resetSnippetSession } from "../../qmd-client.js";
+import { postSnippet, resetSnippetSession } from "../../qmd-client.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import {
   prewarmSessionFile,
@@ -885,6 +885,12 @@ export async function runEmbeddedAttempt(
             });
           }
 
+          // Post the user's query to QMD for realtime recall matching.
+          // The user's question is more relevant for memory search than the LLM response.
+          if (effectivePrompt.length >= 10) {
+            void postSnippet(params.sessionId, effectivePrompt);
+          }
+
           // Only pass images option if there are actually images to pass
           // This avoids potential issues with models that don't expect the images parameter
           if (imageResult.images.length > 0) {
@@ -953,7 +959,7 @@ export async function runEmbeddedAttempt(
         clearActiveEmbeddedRun(params.sessionId, queueHandle);
         // Phase 3: Reset recall state for this session
         resetRecallForSession(params.sessionId);
-        void resetSnippetSession(params.sessionId);
+        void resetSnippetSession(params.sessionKey ?? params.sessionId);
         params.abortSignal?.removeEventListener?.("abort", onAbort);
       }
 
