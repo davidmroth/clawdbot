@@ -18,6 +18,39 @@ import {
   promoteThinkingTagsToBlocks,
 } from "./pi-embedded-utils.js";
 import { createInlineCodeState } from "../markdown/code-spans.js";
+import { postSnippet } from "./qmd-client.js";
+
+// --- QMD Snippet Streaming ---
+// Sliding window: post to QMD every ~200 chars of assistant output
+const QMD_SNIPPET_WINDOW = 200;
+const snippetBuffers = new Map<string, { chars: number; buffer: string }>();
+
+function maybePostSnippet(runId: string, sessionId: string, delta: string) {
+  let state = snippetBuffers.get(runId);
+  if (!state) {
+    state = { chars: 0, buffer: "" };
+    snippetBuffers.set(runId, state);
+  }
+  state.buffer += delta;
+  state.chars += delta.length;
+
+  if (state.chars >= QMD_SNIPPET_WINDOW) {
+    const text = state.buffer;
+    state.chars = 0;
+    // Keep last 50 chars for context overlap
+    state.buffer = text.slice(-50);
+    // Fire-and-forget
+    void postSnippet(sessionId, text);
+  }
+}
+
+export function flushSnippetBuffer(runId: string, sessionId: string) {
+  const state = snippetBuffers.get(runId);
+  if (state && state.buffer.length >= 30) {
+    void postSnippet(sessionId, state.buffer);
+  }
+  snippetBuffers.delete(runId);
+}
 
 export function handleMessageStart(
   ctx: EmbeddedPiSubscribeContext,
@@ -61,7 +94,7 @@ export function handleMessageUpdate(
     ts: Date.now(),
     event: "assistant_text_stream",
     runId: ctx.params.runId,
-    sessionId: (ctx.params.session as { id?: string }).id,
+    sessionId: (ctx.params.session as { sessionId?: string }).sessionId,
     evtType,
     delta,
     content,
@@ -92,6 +125,12 @@ export function handleMessageUpdate(
       ctx.blockChunker.append(chunk);
     } else {
       ctx.state.blockBuffer += chunk;
+    }
+
+    // Phase 3: Stream snippet to QMD for realtime recall
+    const sessionId = (ctx.params.session as { sessionId?: string }).sessionId;
+    if (sessionId) {
+      maybePostSnippet(ctx.params.runId, sessionId, chunk);
     }
   }
 
@@ -162,6 +201,12 @@ export function handleMessageEnd(
   const msg = evt.message;
   if (msg?.role !== "assistant") return;
 
+  // Phase 3: Flush remaining snippet buffer to QMD
+  const sessionId = (ctx.params.session as { sessionId?: string }).sessionId;
+  if (sessionId) {
+    flushSnippetBuffer(ctx.params.runId, sessionId);
+  }
+
   const assistantMessage = msg as AssistantMessage;
   promoteThinkingTagsToBlocks(assistantMessage);
 
@@ -170,7 +215,7 @@ export function handleMessageEnd(
     ts: Date.now(),
     event: "assistant_message_end",
     runId: ctx.params.runId,
-    sessionId: (ctx.params.session as { id?: string }).id,
+    sessionId: (ctx.params.session as { sessionId?: string }).sessionId,
     rawText,
     rawThinking: extractAssistantThinking(assistantMessage),
   });

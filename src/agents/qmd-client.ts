@@ -46,3 +46,39 @@ export async function fetchRecentInsights(limit: number = 5, since?: number): Pr
     return [];
   }
 }
+
+/**
+ * Phase 3: Post a live conversation snippet to QMD for realtime recall.
+ * Fire-and-forget — silent fail if QMD is down or recall is disabled.
+ */
+export async function postSnippet(sessionKey: string, text: string): Promise<void> {
+  try {
+    await fetch(new URL("/v1/snippets", QMD_URL).toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Instance-ID": "default",
+      },
+      body: JSON.stringify({ session_key: sessionKey, text }),
+      signal: AbortSignal.timeout(2000),
+    });
+  } catch {
+    // Silent — QMD may be disabled or recall not enabled
+  }
+}
+
+/**
+ * Reset signal counters for a session (call at turn/session end).
+ */
+export async function resetSnippetSession(sessionKey: string): Promise<void> {
+  try {
+    const url = new URL("/v1/snippets/reset", QMD_URL);
+    url.searchParams.append("session_key", sessionKey);
+    await fetch(url.toString(), {
+      method: "POST",
+      signal: AbortSignal.timeout(2000),
+    });
+  } catch {
+    // Silent
+  }
+}

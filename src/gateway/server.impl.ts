@@ -4,6 +4,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
+import { startQmdObserver } from "../agents/qmd-observer.js";
 import { cleanupOrphanedSessionLocks } from "../agents/session-write-lock.js";
 import { hasAnyActiveSessionMutex } from "../agents/session-mutex.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
@@ -786,6 +787,9 @@ export async function startGatewayServer(
     logBrowser,
   }));
 
+  // Start QMD Observer (Memory Cortex)
+  const qmdObserver = startQmdObserver({ broadcast });
+
   const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers(
     {
       deps,
@@ -854,6 +858,7 @@ export async function startGatewayServer(
 
   return {
     close: async (opts) => {
+      qmdObserver.stop();
       if (diagnosticsEnabled) {
         stopDiagnosticHeartbeat();
       }

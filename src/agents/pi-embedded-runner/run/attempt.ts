@@ -89,6 +89,8 @@ import {
   type EmbeddedPiQueueHandle,
   setActiveEmbeddedRun,
 } from "../runs.js";
+import { resetRecallForSession } from "../../qmd-observer.js";
+import { resetSnippetSession } from "../../qmd-client.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
 import {
   prewarmSessionFile,
@@ -949,6 +951,9 @@ export async function runEmbeddedAttempt(
         if (abortWarnTimer) clearTimeout(abortWarnTimer);
         unsubscribe();
         clearActiveEmbeddedRun(params.sessionId, queueHandle);
+        // Phase 3: Reset recall state for this session
+        resetRecallForSession(params.sessionId);
+        void resetSnippetSession(params.sessionId);
         params.abortSignal?.removeEventListener?.("abort", onAbort);
       }
 
