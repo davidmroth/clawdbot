@@ -146,4 +146,8 @@ export function clearActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueu
   }
 }
 
+export function getActiveEmbeddedRunKeys(): string[] {
+  return Array.from(ACTIVE_EMBEDDED_RUNS.keys());
+}
+
 export type { EmbeddedPiQueueHandle };
