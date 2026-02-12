@@ -21,6 +21,7 @@ export type AgentEventPayload = {
 export type AgentRunContext = {
   sessionKey?: string;
   verboseLevel?: VerboseLevel;
+  runSource?: string; // "user" | "recall" | "heartbeat" | "cron" | "consciousness"
 };
 
 // Keep per-run counters so streams stay strictly monotonic per runId.
@@ -43,6 +44,9 @@ export function registerAgentRunContext(
   }
   if (context.verboseLevel && existing.verboseLevel !== context.verboseLevel) {
     existing.verboseLevel = context.verboseLevel;
+  }
+  if (context.runSource) {
+    existing.runSource = context.runSource;
   }
 }
 

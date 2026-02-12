@@ -1,5 +1,5 @@
 import { createSubsystemLogger } from "../logging.js";
-import { getActiveEmbeddedRunKeys, queueEmbeddedPiMessage } from "./pi-embedded-runner/runs.js";
+import { getActiveEmbeddedRunKeys, queueEmbeddedPiMessage, tagRunWithRecall } from "./pi-embedded-runner/runs.js";
 
 const log = createSubsystemLogger("qmd-observer");
 
@@ -148,6 +148,7 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
 
     const queued = queueEmbeddedPiMessage(sessionKey, recallMessage, "system");
     if (queued) {
+      tagRunWithRecall(sessionKey);
       recalledSessions.add(sessionKey);
       log.info("Memory recall injected", { sessionKey, path, score: score.toFixed(3) });
 

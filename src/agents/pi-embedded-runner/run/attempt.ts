@@ -728,11 +728,18 @@ export async function runEmbeddedAttempt(
       } = subscription;
 
       const queueHandle: EmbeddedPiQueueHandle = {
+        runId: params.runId,
         queueMessage: async (text: string, role: "user" | "system" = "user") => {
           if (role === "system") {
-            // Inject system message directly into history so it's included in next context window
-            activeSession.messages.push({ role: "system", content: text });
-            activeSession.agent.replaceMessages(activeSession.messages);
+            if (activeSession.isStreaming) {
+              // Recall fired after the pre-prompt buffer — LLM already streaming.
+              // Use steer() so the recall is delivered to the LLM in this turn.
+              await activeSession.steer(text);
+            } else {
+              // Pre-prompt window — add to messages array so it's in the upcoming LLM context.
+              activeSession.messages.push({ role: "system", content: text });
+              activeSession.agent.replaceMessages(activeSession.messages);
+            }
           } else {
             await activeSession.steer(text);
           }
@@ -897,8 +904,10 @@ export async function runEmbeddedAttempt(
           if (effectivePrompt.length >= 10) {
             void postSnippet(params.sessionKey ?? params.sessionId, effectivePrompt);
             // Give QMD a moment to search and broadcast a signal before we lock in the LLM context.
-            // This small race-condition buffer ensures "Ah-Ha" moments are included in *this* turn.
-            await new Promise(resolve => setTimeout(resolve, 800));
+            // 1500ms covers typical QMD embedding + search latency.
+            // If recall arrives after this window (while LLM is streaming), queueMessage falls back
+            // to steer() so the recall is still delivered to the LLM in the current turn.
+            await new Promise(resolve => setTimeout(resolve, 1500));
           }
 
           // Only pass images option if there are actually images to pass

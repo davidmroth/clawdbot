@@ -89,6 +89,7 @@ export async function runAgentTurnWithFallback(params: {
     registerAgentRunContext(runId, {
       sessionKey: params.sessionKey,
       verboseLevel: params.resolvedVerboseLevel,
+      runSource: params.isHeartbeat ? "heartbeat" : "user",
     });
   }
   let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;

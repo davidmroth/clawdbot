@@ -1,5 +1,5 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import { emitAgentEvent } from "../../../infra/agent-events.js";
+import { emitAgentEvent, getAgentRunContext } from "../../../infra/agent-events.js";
 import { normalizeChunk } from "../../../gateway/stream-normalizer.js";
 
 type LlmDebugLogger = {
@@ -28,6 +28,7 @@ export function createLlmDebugLogger(params: {
           system: params.systemPrompt ?? (context as any).system,
           tools: (context as any).tools,
           config: (context as any).config,
+          runSource: getAgentRunContext(params.runId)?.runSource,
         };
 
         emitAgentEvent({

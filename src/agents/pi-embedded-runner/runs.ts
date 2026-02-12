@@ -3,8 +3,10 @@ import {
   logMessageQueued,
   logSessionStateChange,
 } from "../../logging/diagnostic.js";
+import { registerAgentRunContext } from "../../infra/agent-events.js";
 
 type EmbeddedPiQueueHandle = {
+  runId?: string;
   queueMessage: (text: string, role?: "user" | "system") => Promise<void>;
   isStreaming: () => boolean;
   isCompacting: () => boolean;
@@ -29,9 +31,10 @@ export function queueEmbeddedPiMessage(
     diag.debug(`queue message failed: sessionId=${sessionId} reason=no_active_run activeRuns=[${activeKeys.join(", ")}]`);
     return false;
   }
-  // System messages are appended to the messages array (no active stream required),
-  // so they can be injected during the pre-prompt recall window. User messages call
-  // steer() which requires an active stream.
+  // System messages can be injected at any time:
+  //   - Before streaming (pre-prompt window): pushed directly into the message array.
+  //   - During streaming: queueMessage falls back to steer() so recall reaches the LLM now.
+  // User messages must call steer() which requires an active stream.
   if (role !== "system" && !handle.isStreaming()) {
     diag.debug(`queue message failed: sessionId=${sessionId} reason=not_streaming`);
     return false;
@@ -148,6 +151,12 @@ export function clearActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueu
 
 export function getActiveEmbeddedRunKeys(): string[] {
   return Array.from(ACTIVE_EMBEDDED_RUNS.keys());
+}
+
+export function tagRunWithRecall(sessionKey: string): void {
+  const handle = ACTIVE_EMBEDDED_RUNS.get(sessionKey);
+  if (!handle?.runId) return;
+  registerAgentRunContext(handle.runId, { runSource: "recall" });
 }
 
 export type { EmbeddedPiQueueHandle };
