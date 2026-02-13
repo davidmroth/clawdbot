@@ -737,7 +737,9 @@ export async function runEmbeddedAttempt(
               await activeSession.steer(text);
             } else {
               // Pre-prompt window — add to messages array so it's in the upcoming LLM context.
-              activeSession.messages.push({ role: "system", content: text });
+              // NOTE: pi-agent's convertToLlm only keeps "user" | "assistant" | "toolResult"
+              // roles, so we must inject as "user" for the message to reach the LLM.
+              activeSession.messages.push({ role: "user", content: text });
               activeSession.agent.replaceMessages(activeSession.messages);
             }
           } else {
