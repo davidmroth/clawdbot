@@ -18,10 +18,20 @@ export type AgentEventPayload = {
   sessionKey?: string;
 };
 
+export type RecallMeta = {
+  injectedAt: number; // Date.now() when recall was queued
+  deliveryMode: "pre-prompt" | "steer"; // Whether LLM was streaming
+  score: number; // Similarity score (0-1)
+  path: string; // Matched QMD file path
+  tier: string; // Memory tier (semantic, episodic, etc.)
+  title: string; // Matched document title
+};
+
 export type AgentRunContext = {
   sessionKey?: string;
   verboseLevel?: VerboseLevel;
   runSource?: string; // "user" | "recall" | "heartbeat" | "cron" | "consciousness"
+  recallMeta?: RecallMeta;
 };
 
 // Keep per-run counters so streams stay strictly monotonic per runId.
@@ -47,6 +57,9 @@ export function registerAgentRunContext(
   }
   if (context.runSource) {
     existing.runSource = context.runSource;
+  }
+  if (context.recallMeta) {
+    existing.recallMeta = context.recallMeta;
   }
 }
 

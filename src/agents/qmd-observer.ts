@@ -1,5 +1,11 @@
 import { createSubsystemLogger } from "../logging.js";
-import { getActiveEmbeddedRunKeys, queueEmbeddedPiMessage, tagRunWithRecall } from "./pi-embedded-runner/runs.js";
+import {
+  getActiveEmbeddedRunKeys,
+  isEmbeddedPiRunStreaming,
+  queueEmbeddedPiMessage,
+  tagRunWithRecall,
+  tagRunWithRecallMeta,
+} from "./pi-embedded-runner/runs.js";
 
 const log = createSubsystemLogger("qmd-observer");
 
@@ -14,13 +20,15 @@ export function resetRecallForSession(sessionKey: string) {
   recalledSessions.delete(sessionKey);
 }
 
-export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void } {
+export function startQmdObserver(broadcaster: Broadcaster): {
+  stop: () => void;
+} {
   let ws: WebSocket | null = null;
   let retryTimeout: NodeJS.Timeout | null = null;
   let statusInterval: NodeJS.Timeout | null = null;
   let active = true;
   let connected = false;
-  
+
   const QMD_URL = process.env.QMD_URL || "http://memory-service:8100";
   // Convert http(s) to ws(s)
   const WS_URL = QMD_URL.replace(/^http/, "ws") + "/ws";
@@ -32,20 +40,20 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
 
   function connect() {
     if (!active) return;
-    
+
     // Check if we are stuck in a fast fail loop
     const now = Date.now();
-    
+
     try {
       log.debug("Connecting to QMD stream", { url: WS_URL });
       ws = new WebSocket(WS_URL);
-      
+
       ws.onopen = () => {
         log.info("Connected to QMD stream");
         connected = true;
         broadcaster.broadcast("qmd/status", { connected: true });
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data as string);
@@ -69,18 +77,17 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
           log.warn("Failed to parse QMD message", { error: String(err) });
         }
       };
-      
+
       ws.onclose = () => {
         log.info("QMD stream closed, will reconnect in 5s");
         connected = false;
         broadcaster.broadcast("qmd/status", { connected: false });
         scheduleReconnect();
       };
-      
+
       ws.onerror = (err: Event) => {
         log.warn("QMD stream error", { url: WS_URL });
       };
-      
     } catch (err) {
       log.error("Failed to create WebSocket", { error: String(err) });
       scheduleReconnect();
@@ -124,7 +131,9 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
 
     // Max 1 recall injection per turn per session
     if (recalledSessions.has(sessionKey)) {
-      log.debug("Recall already sent for session this turn, skipping", { sessionKey });
+      log.debug("Recall already sent for session this turn, skipping", {
+        sessionKey,
+      });
       return;
     }
 
@@ -139,28 +148,51 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
       `File: ${path} | Tier: ${tier} | Title: "${title}" | Confidence: ${Math.round(score * 100)}%`,
     ];
     if (content) {
-      recallLines.push(`--- BEGIN RECALLED CONTENT ---`, content, `--- END RECALLED CONTENT ---`);
+      recallLines.push(
+        `--- BEGIN RECALLED CONTENT ---`,
+        content,
+        `--- END RECALLED CONTENT ---`,
+      );
       recallLines.push(`Use the above content to inform your response.`);
     } else {
-      recallLines.push(`You MUST read the file "${path}" using your file-read tool to retrieve the relevant context before responding.`);
+      recallLines.push(
+        `You MUST read the file "${path}" using your file-read tool to retrieve the relevant context before responding.`,
+      );
     }
     const recallMessage = recallLines.join("\n");
 
     const queued = queueEmbeddedPiMessage(sessionKey, recallMessage, "system");
     if (queued) {
       tagRunWithRecall(sessionKey);
+      tagRunWithRecallMeta(sessionKey, {
+        injectedAt: Date.now(),
+        deliveryMode: isEmbeddedPiRunStreaming(sessionKey)
+          ? "steer"
+          : "pre-prompt",
+        score,
+        path,
+        tier,
+        title,
+      });
       recalledSessions.add(sessionKey);
-      log.info("Memory recall injected", { sessionKey, path, score: score.toFixed(3) });
+      log.info("Memory recall injected", {
+        sessionKey,
+        path,
+        score: score.toFixed(3),
+      });
 
       // Broadcast to UI for Cortex visualization
       broadcaster.broadcast("qmd/signal", signal);
     } else {
-      log.warn("Could not queue recall — queueEmbeddedPiMessage returned false", {
-        sessionKey,
-        activeRunKeys: getActiveEmbeddedRunKeys(),
-        path,
-        score: score.toFixed(3),
-      });
+      log.warn(
+        "Could not queue recall — queueEmbeddedPiMessage returned false",
+        {
+          sessionKey,
+          activeRunKeys: getActiveEmbeddedRunKeys(),
+          path,
+          score: score.toFixed(3),
+        },
+      );
     }
   }
 
@@ -171,9 +203,9 @@ export function startQmdObserver(broadcaster: Broadcaster): { stop: () => void }
       if (retryTimeout) clearTimeout(retryTimeout);
       if (statusInterval) clearInterval(statusInterval);
       if (ws) {
-         ws.close(); 
-         ws = null;
+        ws.close();
+        ws = null;
       }
-    }
+    },
   };
 }

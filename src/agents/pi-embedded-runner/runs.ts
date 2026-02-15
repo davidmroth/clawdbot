@@ -3,7 +3,10 @@ import {
   logMessageQueued,
   logSessionStateChange,
 } from "../../logging/diagnostic.js";
-import { registerAgentRunContext } from "../../infra/agent-events.js";
+import {
+  registerAgentRunContext,
+  type RecallMeta,
+} from "../../infra/agent-events.js";
 
 type EmbeddedPiQueueHandle = {
   runId?: string;
@@ -23,12 +26,14 @@ const EMBEDDED_RUN_WAITERS = new Map<string, Set<EmbeddedRunWaiter>>();
 export function queueEmbeddedPiMessage(
   sessionId: string,
   text: string,
-  role: "user" | "system" = "user"
+  role: "user" | "system" = "user",
 ): boolean {
   const handle = ACTIVE_EMBEDDED_RUNS.get(sessionId);
   if (!handle) {
     const activeKeys = Array.from(ACTIVE_EMBEDDED_RUNS.keys());
-    diag.debug(`queue message failed: sessionId=${sessionId} reason=no_active_run activeRuns=[${activeKeys.join(", ")}]`);
+    diag.debug(
+      `queue message failed: sessionId=${sessionId} reason=no_active_run activeRuns=[${activeKeys.join(", ")}]`,
+    );
     return false;
   }
   // System messages can be injected at any time:
@@ -36,11 +41,15 @@ export function queueEmbeddedPiMessage(
   //   - During streaming: queueMessage falls back to steer() so recall reaches the LLM now.
   // User messages must call steer() which requires an active stream.
   if (role !== "system" && !handle.isStreaming()) {
-    diag.debug(`queue message failed: sessionId=${sessionId} reason=not_streaming`);
+    diag.debug(
+      `queue message failed: sessionId=${sessionId} reason=not_streaming`,
+    );
     return false;
   }
   if (handle.isCompacting()) {
-    diag.debug(`queue message failed: sessionId=${sessionId} reason=compacting`);
+    diag.debug(
+      `queue message failed: sessionId=${sessionId} reason=compacting`,
+    );
     return false;
   }
   logMessageQueued({ sessionId, source: "pi-embedded-runner" });
@@ -73,9 +82,15 @@ export function isEmbeddedPiRunStreaming(sessionId: string): boolean {
   return handle.isStreaming();
 }
 
-export function waitForEmbeddedPiRunEnd(sessionId: string, timeoutMs = 15_000): Promise<boolean> {
-  if (!sessionId || !ACTIVE_EMBEDDED_RUNS.has(sessionId)) return Promise.resolve(true);
-  diag.debug(`waiting for run end: sessionId=${sessionId} timeoutMs=${timeoutMs}`);
+export function waitForEmbeddedPiRunEnd(
+  sessionId: string,
+  timeoutMs = 15_000,
+): Promise<boolean> {
+  if (!sessionId || !ACTIVE_EMBEDDED_RUNS.has(sessionId))
+    return Promise.resolve(true);
+  diag.debug(
+    `waiting for run end: sessionId=${sessionId} timeoutMs=${timeoutMs}`,
+  );
   return new Promise((resolve) => {
     const waiters = EMBEDDED_RUN_WAITERS.get(sessionId) ?? new Set();
     const waiter: EmbeddedRunWaiter = {
@@ -84,7 +99,9 @@ export function waitForEmbeddedPiRunEnd(sessionId: string, timeoutMs = 15_000): 
         () => {
           waiters.delete(waiter);
           if (waiters.size === 0) EMBEDDED_RUN_WAITERS.delete(sessionId);
-          diag.warn(`wait timeout: sessionId=${sessionId} timeoutMs=${timeoutMs}`);
+          diag.warn(
+            `wait timeout: sessionId=${sessionId} timeoutMs=${timeoutMs}`,
+          );
           resolve(false);
         },
         Math.max(100, timeoutMs),
@@ -105,14 +122,20 @@ function notifyEmbeddedRunEnded(sessionId: string) {
   const waiters = EMBEDDED_RUN_WAITERS.get(sessionId);
   if (!waiters || waiters.size === 0) return;
   EMBEDDED_RUN_WAITERS.delete(sessionId);
-  diag.debug(`notifying waiters: sessionId=${sessionId} waiterCount=${waiters.size}`);
+  diag.debug(
+    `notifying waiters: sessionId=${sessionId} waiterCount=${waiters.size}`,
+  );
   for (const waiter of waiters) {
     clearTimeout(waiter.timer);
     waiter.resolve(true);
   }
 }
 
-export function setActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueueHandle, sessionKey?: string) {
+export function setActiveEmbeddedRun(
+  sessionId: string,
+  handle: EmbeddedPiQueueHandle,
+  sessionKey?: string,
+) {
   const wasActive = ACTIVE_EMBEDDED_RUNS.has(sessionId);
   ACTIVE_EMBEDDED_RUNS.set(sessionId, handle);
   // Also register under the persistent sessionKey so recall signals
@@ -127,25 +150,43 @@ export function setActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueueH
   });
   if (!sessionId.startsWith("probe-")) {
     const registeredKeys = Array.from(ACTIVE_EMBEDDED_RUNS.keys());
-    diag.info(`run registered: sessionId=${sessionId} sessionKey=${sessionKey ?? "none"} registeredKeys=[${registeredKeys.join(", ")}]`);
+    diag.info(
+      `run registered: sessionId=${sessionId} sessionKey=${sessionKey ?? "none"} registeredKeys=[${registeredKeys.join(", ")}]`,
+    );
   }
 }
 
-export function clearActiveEmbeddedRun(sessionId: string, handle: EmbeddedPiQueueHandle, sessionKey?: string) {
+export function clearActiveEmbeddedRun(
+  sessionId: string,
+  handle: EmbeddedPiQueueHandle,
+  sessionKey?: string,
+) {
   if (ACTIVE_EMBEDDED_RUNS.get(sessionId) === handle) {
     ACTIVE_EMBEDDED_RUNS.delete(sessionId);
     // Only remove sessionKey if it still maps to this handle — a new run may have
     // already claimed the same sessionKey before this cleanup runs.
-    if (sessionKey && sessionKey !== sessionId && ACTIVE_EMBEDDED_RUNS.get(sessionKey) === handle) {
+    if (
+      sessionKey &&
+      sessionKey !== sessionId &&
+      ACTIVE_EMBEDDED_RUNS.get(sessionKey) === handle
+    ) {
       ACTIVE_EMBEDDED_RUNS.delete(sessionKey);
     }
-    logSessionStateChange({ sessionId, state: "idle", reason: "run_completed" });
+    logSessionStateChange({
+      sessionId,
+      state: "idle",
+      reason: "run_completed",
+    });
     if (!sessionId.startsWith("probe-")) {
-      diag.debug(`run cleared: sessionId=${sessionId} totalActive=${ACTIVE_EMBEDDED_RUNS.size}`);
+      diag.debug(
+        `run cleared: sessionId=${sessionId} totalActive=${ACTIVE_EMBEDDED_RUNS.size}`,
+      );
     }
     notifyEmbeddedRunEnded(sessionId);
   } else {
-    diag.debug(`run clear skipped: sessionId=${sessionId} reason=handle_mismatch`);
+    diag.debug(
+      `run clear skipped: sessionId=${sessionId} reason=handle_mismatch`,
+    );
   }
 }
 
@@ -157,6 +198,15 @@ export function tagRunWithRecall(sessionKey: string): void {
   const handle = ACTIVE_EMBEDDED_RUNS.get(sessionKey);
   if (!handle?.runId) return;
   registerAgentRunContext(handle.runId, { runSource: "recall" });
+}
+
+export function tagRunWithRecallMeta(
+  sessionKey: string,
+  meta: RecallMeta,
+): void {
+  const handle = ACTIVE_EMBEDDED_RUNS.get(sessionKey);
+  if (!handle?.runId) return;
+  registerAgentRunContext(handle.runId, { recallMeta: meta });
 }
 
 export type { EmbeddedPiQueueHandle };

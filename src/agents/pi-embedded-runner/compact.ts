@@ -8,6 +8,9 @@ import {
   SettingsManager,
 } from "@mariozechner/pi-coding-agent";
 
+import { applyEnhancedConvertToLlm } from "../agent-core/convert-to-llm.js";
+import { useLocalAgentCore } from "../agent-core-flag.js";
+
 import { resolveHeartbeatPrompt } from "../../auto-reply/heartbeat.js";
 import type { ReasoningLevel, ThinkLevel } from "../../auto-reply/thinking.js";
 import {
@@ -457,6 +460,11 @@ export async function compactEmbeddedPiSessionDirect(
         contextFiles: [],
         additionalExtensionPaths,
       }));
+
+      // Feature flag: use enhanced convertToLlm that preserves system messages
+      if (useLocalAgentCore()) {
+        applyEnhancedConvertToLlm(session.agent);
+      }
 
       try {
         const prior = await sanitizeSessionHistory({

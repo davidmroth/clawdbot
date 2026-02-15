@@ -10,6 +10,8 @@ import {
   SettingsManager,
 } from "@mariozechner/pi-coding-agent";
 
+import { applyEnhancedConvertToLlm } from "../../agent-core/convert-to-llm.js";
+import { useLocalAgentCore } from "../../agent-core-flag.js";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { BARE_SESSION_RESET_PROMPT } from "../../../auto-reply/reply/get-reply-run.js";
 import {
@@ -235,16 +237,16 @@ export async function runEmbeddedAttempt(
       try {
         const insights = await fetchRecentInsights(5);
         if (insights.length > 0) {
-           workspaceNotes.push("## QMD Memory Insights");
-           for (const item of insights) {
-              const scorePct = Math.round(item.score * 100);
-              const related = item.details?.match?.title || "Unknown";
-              const note = `- [Recent Insight] Context: "${item.trigger.slice(0, 60)}..." likely relates to "${related}" (Confidence: ${scorePct}%)`;
-              workspaceNotes.push(note);
-           }
+          workspaceNotes.push("## QMD Memory Insights");
+          for (const item of insights) {
+            const scorePct = Math.round(item.score * 100);
+            const related = item.details?.match?.title || "Unknown";
+            const note = `- [Recent Insight] Context: "${item.trigger.slice(0, 60)}..." likely relates to "${related}" (Confidence: ${scorePct}%)`;
+            workspaceNotes.push(note);
+          }
         }
       } catch (e) {
-         // QMD likely disabled or unreachable
+        // QMD likely disabled or unreachable
       }
     }
 
@@ -552,6 +554,12 @@ export async function runEmbeddedAttempt(
       if (!session) {
         throw new Error("Embedded agent session missing");
       }
+
+      // Feature flag: use enhanced convertToLlm that preserves system messages
+      if (useLocalAgentCore()) {
+        applyEnhancedConvertToLlm(session.agent);
+      }
+
       const activeSession = session;
       const cacheTrace = createCacheTrace({
         cfg: params.config,
@@ -729,7 +737,10 @@ export async function runEmbeddedAttempt(
 
       const queueHandle: EmbeddedPiQueueHandle = {
         runId: params.runId,
-        queueMessage: async (text: string, role: "user" | "system" = "user") => {
+        queueMessage: async (
+          text: string,
+          role: "user" | "system" = "user",
+        ) => {
           if (role === "system") {
             if (activeSession.isStreaming) {
               // Recall fired after the pre-prompt buffer — LLM already streaming.
@@ -737,9 +748,11 @@ export async function runEmbeddedAttempt(
               await activeSession.steer(text);
             } else {
               // Pre-prompt window — add to messages array so it's in the upcoming LLM context.
-              // NOTE: pi-agent's convertToLlm only keeps "user" | "assistant" | "toolResult"
-              // roles, so we must inject as "user" for the message to reach the LLM.
-              activeSession.messages.push({ role: "user", content: text });
+              // When the local agent-core is enabled, convertToLlm preserves system messages,
+              // so we can use the correct role. Without it, upstream convertToLlm drops system
+              // messages, so we fall back to "user" to ensure the content reaches the LLM.
+              const msgRole = useLocalAgentCore() ? "system" : "user";
+              activeSession.messages.push({ role: msgRole, content: text });
               activeSession.agent.replaceMessages(activeSession.messages);
             }
           } else {
@@ -904,12 +917,15 @@ export async function runEmbeddedAttempt(
           // Post the user's query to QMD for realtime recall matching.
           // The user's question is more relevant for memory search than the LLM response.
           if (effectivePrompt.length >= 10) {
-            void postSnippet(params.sessionKey ?? params.sessionId, effectivePrompt);
+            void postSnippet(
+              params.sessionKey ?? params.sessionId,
+              effectivePrompt,
+            );
             // Give QMD a moment to search and broadcast a signal before we lock in the LLM context.
             // 1500ms covers typical QMD embedding + search latency.
             // If recall arrives after this window (while LLM is streaming), queueMessage falls back
             // to steer() so the recall is still delivered to the LLM in the current turn.
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
           }
 
           // Only pass images option if there are actually images to pass
@@ -921,11 +937,16 @@ export async function runEmbeddedAttempt(
               }),
             );
           } else {
-            const heartbeatText = resolveHeartbeatPrompt(params.config?.agents?.defaults?.heartbeat?.prompt);
+            const heartbeatText = resolveHeartbeatPrompt(
+              params.config?.agents?.defaults?.heartbeat?.prompt,
+            );
             if (effectivePrompt === heartbeatText) {
               // Inject heartbeat instruction as a system message so it's not visible as a user turn.
               // Then trigger the LLM with a minimal user prompt so it actually processes the instruction.
-              activeSession.messages.push({ role: "system", content: effectivePrompt });
+              activeSession.messages.push({
+                role: "system",
+                content: effectivePrompt,
+              });
               activeSession.agent.replaceMessages(activeSession.messages);
               await abortable(activeSession.prompt("[heartbeat]"));
             } else {
@@ -986,7 +1007,11 @@ export async function runEmbeddedAttempt(
         clearTimeout(abortTimer);
         if (abortWarnTimer) clearTimeout(abortWarnTimer);
         unsubscribe();
-        clearActiveEmbeddedRun(params.sessionId, queueHandle, params.sessionKey);
+        clearActiveEmbeddedRun(
+          params.sessionId,
+          queueHandle,
+          params.sessionKey,
+        );
         // Phase 3: Reset recall state for this session (clear both keys to avoid leaks)
         resetRecallForSession(params.sessionId);
         if (params.sessionKey && params.sessionKey !== params.sessionId) {

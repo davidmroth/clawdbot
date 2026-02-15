@@ -1,5 +1,8 @@
 import type { StreamFn } from "@mariozechner/pi-agent-core";
-import { emitAgentEvent, getAgentRunContext } from "../../../infra/agent-events.js";
+import {
+  emitAgentEvent,
+  getAgentRunContext,
+} from "../../../infra/agent-events.js";
 import { normalizeChunk } from "../../../gateway/stream-normalizer.js";
 
 type LlmDebugLogger = {
@@ -29,6 +32,7 @@ export function createLlmDebugLogger(params: {
           tools: (context as any).tools,
           config: (context as any).config,
           runSource: getAgentRunContext(params.runId)?.runSource,
+          recallMeta: getAgentRunContext(params.runId)?.recallMeta,
         };
 
         emitAgentEvent({
@@ -90,10 +94,10 @@ export function createLlmDebugLogger(params: {
                     toolCallId: normalized.toolCallId,
                   });
                 } else if (normalized && "usage" in (normalized as any)) {
-                   // Fallback for usage-only chunks
-                   if ((normalized as any).usage) {
-                     usage = (normalized as any).usage;
-                   }
+                  // Fallback for usage-only chunks
+                  if ((normalized as any).usage) {
+                    usage = (normalized as any).usage;
+                  }
                 }
 
                 yield chunk;
