@@ -2,7 +2,10 @@ import type { AgentEvent } from "@mariozechner/pi-agent-core";
 
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { normalizeTextForComparison } from "./pi-embedded-helpers.js";
-import { isMessagingTool, isMessagingToolSendAction } from "./pi-embedded-messaging.js";
+import {
+  isMessagingTool,
+  isMessagingToolSendAction,
+} from "./pi-embedded-messaging.js";
 import type { EmbeddedPiSubscribeContext } from "./pi-embedded-subscribe.handlers.types.js";
 import {
   extractToolErrorMessage,
@@ -14,7 +17,11 @@ import {
 import { inferToolMetaFromArgs } from "./pi-embedded-utils.js";
 import { normalizeToolName } from "./tool-policy.js";
 
-function extendExecMeta(toolName: string, args: unknown, meta?: string): string | undefined {
+function extendExecMeta(
+  toolName: string,
+  args: unknown,
+  meta?: string,
+): string | undefined {
   const normalized = toolName.trim().toLowerCase();
   if (normalized !== "exec" && normalized !== "bash") return meta;
   if (!args || typeof args !== "object") return meta;
@@ -43,17 +50,23 @@ export async function handleToolExecutionStart(
   const args = evt.args;
 
   if (toolName === "read") {
-    const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+    const record =
+      args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const filePath = typeof record.path === "string" ? record.path.trim() : "";
     if (!filePath) {
-      const argsPreview = typeof args === "string" ? args.slice(0, 200) : undefined;
+      const argsPreview =
+        typeof args === "string" ? args.slice(0, 200) : undefined;
       ctx.log.warn(
         `read tool called without path: toolCallId=${toolCallId} argsType=${typeof args}${argsPreview ? ` argsPreview=${argsPreview}` : ""}`,
       );
     }
   }
 
-  const meta = extendExecMeta(toolName, args, inferToolMetaFromArgs(toolName, args));
+  const meta = extendExecMeta(
+    toolName,
+    args,
+    inferToolMetaFromArgs(toolName, args),
+  );
   ctx.state.toolMetaById.set(toolCallId, meta);
   ctx.log.debug(
     `embedded run tool start: runId=${ctx.params.runId} tool=${toolName} toolCallId=${toolCallId}`,
@@ -87,7 +100,8 @@ export async function handleToolExecutionStart(
 
   // Track messaging tool sends (pending until confirmed in tool_execution_end).
   if (isMessagingTool(toolName)) {
-    const argsRecord = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+    const argsRecord =
+      args && typeof args === "object" ? (args as Record<string, unknown>) : {};
     const isMessagingSend = isMessagingToolSendAction(toolName, argsRecord);
     if (isMessagingSend) {
       const sendTarget = extractMessagingToolSend(toolName, argsRecord);
@@ -95,10 +109,13 @@ export async function handleToolExecutionStart(
         ctx.state.pendingMessagingTargets.set(toolCallId, sendTarget);
       }
       // Field names vary by tool: Discord/Slack use "content", sessions_send uses "message"
-      const text = (argsRecord.content as string) ?? (argsRecord.message as string);
+      const text =
+        (argsRecord.content as string) ?? (argsRecord.message as string);
       if (text && typeof text === "string") {
         ctx.state.pendingMessagingTexts.set(toolCallId, text);
-        ctx.log.debug(`Tracking pending messaging text: tool=${toolName} len=${text.length}`);
+        ctx.log.debug(
+          `Tracking pending messaging text: tool=${toolName} len=${text.length}`,
+        );
       }
     }
   }
@@ -123,7 +140,7 @@ export function handleToolExecutionUpdate(
       phase: "update",
       name: toolName,
       toolCallId,
-      partialResult: sanitized,
+      ...(ctx.shouldEmitToolOutput() ? { partialResult: sanitized } : {}),
     },
   });
   void ctx.params.onAgentEvent?.({
@@ -171,8 +188,12 @@ export function handleToolExecutionEnd(
     ctx.state.pendingMessagingTexts.delete(toolCallId);
     if (!isToolError) {
       ctx.state.messagingToolSentTexts.push(pendingText);
-      ctx.state.messagingToolSentTextsNormalized.push(normalizeTextForComparison(pendingText));
-      ctx.log.debug(`Committed messaging text: tool=${toolName} len=${pendingText.length}`);
+      ctx.state.messagingToolSentTextsNormalized.push(
+        normalizeTextForComparison(pendingText),
+      );
+      ctx.log.debug(
+        `Committed messaging text: tool=${toolName} len=${pendingText.length}`,
+      );
       ctx.trimMessagingToolSent();
     }
   }
@@ -193,7 +214,10 @@ export function handleToolExecutionEnd(
       toolCallId,
       meta,
       isError: isToolError,
-      result: sanitizedResult,
+      // Only include tool result content when verbose output is enabled.
+      // Without this gate, the full result leaks to the webchat UI via the
+      // agent-event websocket stream (app-tool-stream.ts renders data.result).
+      ...(ctx.shouldEmitToolOutput() ? { result: sanitizedResult } : {}),
     },
   });
   void ctx.params.onAgentEvent?.({

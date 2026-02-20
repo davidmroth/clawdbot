@@ -6,9 +6,10 @@
  *
  * ┌──────────────────────────────────────────────────────────────────┐
  * │ CLAWDBOT ENHANCEMENT                                           │
- * │ defaultConvertToLlm now preserves `role: "system"` messages.   │
- * │ Upstream version silently drops them, breaking heartbeats and   │
- * │ recall injection.                                               │
+ * │ defaultConvertToLlm converts `role: "system"` messages into    │
+ * │ synthetic toolCall/toolResult pairs via convertToLlmEnhanced.  │
+ * │ Upstream and pi-ai Google adapter both silently drop system     │
+ * │ messages, breaking heartbeats and recall injection.             │
  * └──────────────────────────────────────────────────────────────────┘
  *
  * Dependencies retained:
@@ -26,6 +27,7 @@ import {
   type Transport,
 } from "@mariozechner/pi-ai";
 import { agentLoop, agentLoopContinue } from "./agent-loop.js";
+import { convertToLlmEnhanced } from "./convert-to-llm.js";
 import type {
   AgentContext,
   AgentEvent,
@@ -38,21 +40,13 @@ import type {
 } from "./types.js";
 
 /**
- * Enhanced convertToLlm: keeps user, assistant, toolResult **and system** messages.
+ * Default convertToLlm: delegates to `convertToLlmEnhanced` which handles
+ * system message → synthetic toolCall/toolResult conversion.
  *
- * The upstream default filters to only `user | assistant | toolResult`,
- * silently dropping system messages before they reach the LLM.
- * This version preserves system messages so heartbeat instructions,
- * recall context, and other system-initiated content reach the LLM.
+ * See `convert-to-llm.ts` for the full explanation of why this is needed.
  */
 function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
-  return messages.filter(
-    (m) =>
-      m.role === "user" ||
-      m.role === "assistant" ||
-      m.role === "toolResult" ||
-      m.role === "system",
-  );
+  return convertToLlmEnhanced(messages) as Message[];
 }
 
 export interface AgentOptions {
