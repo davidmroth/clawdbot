@@ -3,7 +3,6 @@ import {
   getActiveEmbeddedRunKeys,
   isEmbeddedPiRunStreaming,
   queueEmbeddedPiMessage,
-  tagRunWithRecall,
   tagRunWithRecallMeta,
 } from "./pi-embedded-runner/runs.js";
 
@@ -163,7 +162,6 @@ export function startQmdObserver(broadcaster: Broadcaster): {
 
     const queued = queueEmbeddedPiMessage(sessionKey, recallMessage, "system");
     if (queued) {
-      tagRunWithRecall(sessionKey);
       tagRunWithRecallMeta(sessionKey, {
         injectedAt: Date.now(),
         deliveryMode: isEmbeddedPiRunStreaming(sessionKey)

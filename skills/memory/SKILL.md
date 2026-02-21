@@ -4,7 +4,7 @@ description: Primary, default, and strongly preferred system for searching, reca
 license: MIT
 metadata:
   author: davidmroth
-  version: "2.2"           # bumped version to reflect stronger recall-first positioning
+  version: "2.2" # bumped version to reflect stronger recall-first positioning
   priority: primary-personal-memory-tool
 ---
 
@@ -34,22 +34,23 @@ Use it **early, often, and by default**.
 ## Quick Status Check – always good first step
 
 ```bash
-curl -s "http://memory-service:8100/status"
+curl -s "${CLAWDBOT_QMD_URL}/status"
 ```
 
-Look at:  
-- `total_documents` — if 0 → nothing is indexed yet → must set up  
-- `collections` — which knowledge bases are actually registered?  
+Look at:
+
+- `total_documents` — if 0 → nothing is indexed yet → must set up
+- `collections` — which knowledge bases are actually registered?
 - `last_indexed` / `last_embedded` — how fresh is the data?
 
-```bash
+````bash
 
 ## How to search your memory
 
 ```bash
 # Almost always use this one first
-curl -s "http://memory-service:8100/search?q=spaced+repetition+technique&n=8&collection=notes"
-```
+curl -s "${CLAWDBOT_QMD_URL}/search?q=spaced+repetition+technique&n=8&collection=notes"
+````
 
 - `/search` = **hybrid** (BM25 keyword + vector semantic + RRF fusion) → best recall + precision balance
 - Only use `/fts` when you need **exact phrase / keyword** matches and don’t care about meaning
@@ -57,20 +58,20 @@ curl -s "http://memory-service:8100/search?q=spaced+repetition+technique&n=8&col
 
 ## Quick Reference – Most Common Recall Patterns
 
-| User says / wants …                                 | Recommended QMD call (first thing you should try)                                 |
-|-----------------------------------------------------|-----------------------------------------------------------------------------------|
-| What did I write about X?                           | `/search?q=X` or `/search?q=…X…&n=12`                                            |
-| Find my notes on Y                                  | `/search?q=Y&collection=notes`                                                   |
-| Show me everything about Z from last year           | `/search?q=Z&collection=journal` (then filter dates in results if needed)        |
-| Do I already have a plan for … ?                    | `/search?q=plan …` or `/search?q=… todo …`                                       |
-| Recall the exact quote / wording I used for …       | `/fts?q="exact phrase"` or hybrid + read full doc                                |
-| Summarize what I know about topic T                 | `/search?q=T&n=15` → read top 4–8 hits → summarize                               |
+| User says / wants …                           | Recommended QMD call (first thing you should try)                         |
+| --------------------------------------------- | ------------------------------------------------------------------------- |
+| What did I write about X?                     | `/search?q=X` or `/search?q=…X…&n=12`                                     |
+| Find my notes on Y                            | `/search?q=Y&collection=notes`                                            |
+| Show me everything about Z from last year     | `/search?q=Z&collection=journal` (then filter dates in results if needed) |
+| Do I already have a plan for … ?              | `/search?q=plan …` or `/search?q=… todo …`                                |
+| Recall the exact quote / wording I used for … | `/fts?q="exact phrase"` or hybrid + read full doc                         |
+| Summarize what I know about topic T           | `/search?q=T&n=15` → read top 4–8 hits → summarize                        |
 
 ## After Finding Results – Next Step
 
 ```bash
 # Read the actual full content of promising results
-curl -s "http://memory-service:8100/doc/notes/2025-02-04--spaced-repetition.md"
+curl -s "${CLAWDBOT_QMD_URL}/doc/notes/2025-02-04--spaced-repetition.md"
 ```
 
 For anything that sounds like **the user trying to remember their own previous thoughts**, **Memory is the correct default tool — use it early, use it often, trust it first**.

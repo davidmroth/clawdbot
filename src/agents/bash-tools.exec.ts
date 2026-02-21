@@ -55,7 +55,10 @@ import { callGatewayTool } from "./tools/gateway.js";
 import { listNodes, resolveNodeIdFromList } from "./tools/nodes-utils.js";
 import { getShellConfig, sanitizeBinaryOutput } from "./shell-utils.js";
 import { buildCursorPositionResponse, stripDsrRequests } from "./pty-dsr.js";
-import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
+import {
+  parseAgentSessionKey,
+  resolveAgentIdFromSessionKey,
+} from "../routing/session-key.js";
 
 const DEFAULT_MAX_OUTPUT = clampNumber(
   readEnvInt("PI_BASH_MAX_OUTPUT_CHARS"),
@@ -70,7 +73,8 @@ const DEFAULT_PENDING_MAX_OUTPUT = clampNumber(
   200_000,
 );
 const DEFAULT_PATH =
-  process.env.PATH ?? "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+  process.env.PATH ??
+  "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const DEFAULT_NOTIFY_TAIL_CHARS = 400;
 const DEFAULT_APPROVAL_TIMEOUT_MS = 120_000;
 const DEFAULT_APPROVAL_REQUEST_TIMEOUT_MS = 130_000;
@@ -146,14 +150,18 @@ export type ExecElevatedDefaults = {
 
 const execSchema = Type.Object({
   command: Type.String({ description: "Shell command to execute" }),
-  workdir: Type.Optional(Type.String({ description: "Working directory (defaults to cwd)" })),
+  workdir: Type.Optional(
+    Type.String({ description: "Working directory (defaults to cwd)" }),
+  ),
   env: Type.Optional(Type.Record(Type.String(), Type.String())),
   yieldMs: Type.Optional(
     Type.Number({
       description: "Milliseconds to wait before backgrounding (default 10000)",
     }),
   ),
-  background: Type.Optional(Type.Boolean({ description: "Run in background immediately" })),
+  background: Type.Optional(
+    Type.Boolean({ description: "Run in background immediately" }),
+  ),
   timeout: Type.Optional(
     Type.Number({
       description: "Timeout in seconds (optional, kills process on expiry)",
@@ -221,7 +229,11 @@ export type ExecToolDetails =
 
 function normalizeExecHost(value?: string | null): ExecHost | null {
   const normalized = value?.trim().toLowerCase();
-  if (normalized === "sandbox" || normalized === "gateway" || normalized === "node") {
+  if (
+    normalized === "sandbox" ||
+    normalized === "gateway" ||
+    normalized === "node"
+  ) {
     return normalized;
   }
   return null;
@@ -229,7 +241,11 @@ function normalizeExecHost(value?: string | null): ExecHost | null {
 
 function normalizeExecSecurity(value?: string | null): ExecSecurity | null {
   const normalized = value?.trim().toLowerCase();
-  if (normalized === "deny" || normalized === "allowlist" || normalized === "full") {
+  if (
+    normalized === "deny" ||
+    normalized === "allowlist" ||
+    normalized === "full"
+  ) {
     return normalized;
   }
   return null;
@@ -237,14 +253,22 @@ function normalizeExecSecurity(value?: string | null): ExecSecurity | null {
 
 function normalizeExecAsk(value?: string | null): ExecAsk | null {
   const normalized = value?.trim().toLowerCase();
-  if (normalized === "off" || normalized === "on-miss" || normalized === "always") {
+  if (
+    normalized === "off" ||
+    normalized === "on-miss" ||
+    normalized === "always"
+  ) {
     return normalized as ExecAsk;
   }
   return null;
 }
 
 function renderExecHostLabel(host: ExecHost) {
-  return host === "sandbox" ? "sandbox" : host === "gateway" ? "gateway" : "node";
+  return host === "sandbox"
+    ? "sandbox"
+    : host === "gateway"
+      ? "gateway"
+      : "node";
 }
 
 function normalizeNotifyOutput(value: string) {
@@ -292,7 +316,10 @@ function applyPathPrepend(
   if (merged) env.PATH = merged;
 }
 
-function applyShellPath(env: Record<string, string>, shellPath?: string | null) {
+function applyShellPath(
+  env: Record<string, string>,
+  shellPath?: string | null,
+) {
   if (!shellPath) return;
   const entries = shellPath
     .split(path.delimiter)
@@ -303,8 +330,12 @@ function applyShellPath(env: Record<string, string>, shellPath?: string | null) 
   if (merged) env.PATH = merged;
 }
 
-function maybeNotifyOnExit(session: ProcessSession, status: "completed" | "failed") {
-  if (!session.backgrounded || !session.notifyOnExit || session.exitNotified) return;
+function maybeNotifyOnExit(
+  session: ProcessSession,
+  status: "completed" | "failed",
+) {
+  if (!session.backgrounded || !session.notifyOnExit || session.exitNotified)
+    return;
   const sessionKey = session.sessionKey?.trim();
   if (!sessionKey) return;
   session.exitNotified = true;
@@ -333,7 +364,10 @@ function resolveApprovalRunningNoticeMs(value?: number) {
   return Math.floor(value);
 }
 
-function emitExecSystemEvent(text: string, opts: { sessionKey?: string; contextKey?: string }) {
+function emitExecSystemEvent(
+  text: string,
+  opts: { sessionKey?: string; contextKey?: string },
+) {
   const sessionKey = opts.sessionKey?.trim();
   if (!sessionKey) return;
   enqueueSystemEvent(text, { sessionKey, contextKey: opts.contextKey });
@@ -390,7 +424,9 @@ async function runExecProcess(opts: {
       onFallback: (err, fallback) => {
         const errText = formatSpawnError(err);
         const warning = `Warning: spawn failed (${errText}); retrying with ${fallback.label}.`;
-        logWarn(`exec: spawn failed (${errText}); retrying with ${fallback.label}.`);
+        logWarn(
+          `exec: spawn failed (${errText}); retrying with ${fallback.label}.`,
+        );
         opts.warnings.push(warning);
       },
     });
@@ -405,7 +441,9 @@ async function runExecProcess(opts: {
       };
       const spawnPty = ptyModule.spawn ?? ptyModule.default?.spawn;
       if (!spawnPty) {
-        throw new Error("PTY support is unavailable (node-pty spawn not found).");
+        throw new Error(
+          "PTY support is unavailable (node-pty spawn not found).",
+        );
       }
       pty = spawnPty(shell, [...shellArgs, opts.command], {
         cwd: opts.workdir,
@@ -436,7 +474,9 @@ async function runExecProcess(opts: {
     } catch (err) {
       const errText = String(err);
       const warning = `Warning: PTY spawn failed (${errText}); retrying without PTY for \`${opts.command}\`.`;
-      logWarn(`exec: PTY spawn failed (${errText}); retrying without PTY for "${opts.command}".`);
+      logWarn(
+        `exec: PTY spawn failed (${errText}); retrying without PTY for "${opts.command}".`,
+      );
       opts.warnings.push(warning);
       const { child: spawned } = await spawnWithFallback({
         argv: [shell, ...shellArgs, opts.command],
@@ -456,7 +496,9 @@ async function runExecProcess(opts: {
         onFallback: (fallbackErr, fallback) => {
           const fallbackText = formatSpawnError(fallbackErr);
           const fallbackWarning = `Warning: spawn failed (${fallbackText}); retrying with ${fallback.label}.`;
-          logWarn(`exec: spawn failed (${fallbackText}); retrying with ${fallback.label}.`);
+          logWarn(
+            `exec: spawn failed (${fallbackText}); retrying with ${fallback.label}.`,
+          );
           opts.warnings.push(fallbackWarning);
         },
       });
@@ -483,7 +525,9 @@ async function runExecProcess(opts: {
       onFallback: (err, fallback) => {
         const errText = formatSpawnError(err);
         const warning = `Warning: spawn failed (${errText}); retrying with ${fallback.label}.`;
-        logWarn(`exec: spawn failed (${errText}); retrying with ${fallback.label}.`);
+        logWarn(
+          `exec: spawn failed (${errText}); retrying with ${fallback.label}.`,
+        );
         opts.warnings.push(warning);
       },
     });
@@ -569,7 +613,9 @@ async function runExecProcess(opts: {
   const emitUpdate = () => {
     if (!opts.onUpdate) return;
     const tailText = session.tail || session.aggregated;
-    const warningText = opts.warnings.length ? `${opts.warnings.join("\n")}\n\n` : "";
+    const warningText = opts.warnings.length
+      ? `${opts.warnings.join("\n")}\n\n`
+      : "";
     opts.onUpdate({
       content: [{ type: "text", text: warningText + (tailText || "") }],
       details: {
@@ -618,7 +664,10 @@ async function runExecProcess(opts: {
 
   const promise = new Promise<ExecProcessOutcome>((resolve) => {
     resolveFn = resolve;
-    const handleExit = (code: number | null, exitSignal: NodeJS.Signals | number | null) => {
+    const handleExit = (
+      code: number | null,
+      exitSignal: NodeJS.Signals | number | null,
+    ) => {
       if (timeoutTimer) clearTimeout(timeoutTimer);
       if (timeoutFinalizeTimer) clearTimeout(timeoutFinalizeTimer);
       const durationMs = Date.now() - startedAt;
@@ -680,7 +729,9 @@ async function runExecProcess(opts: {
         markExited(session, null, null, "failed");
         maybeNotifyOnExit(session, "failed");
         const aggregated = session.aggregated.trim();
-        const message = aggregated ? `${aggregated}\n\n${String(err)}` : String(err);
+        const message = aggregated
+          ? `${aggregated}\n\n${String(err)}`
+          : String(err);
         settle({
           status: "failed",
           exitCode: null,
@@ -722,12 +773,16 @@ export function createExecTool(
   const safeBins = resolveSafeBins(defaults?.safeBins);
   const notifyOnExit = defaults?.notifyOnExit !== false;
   const notifySessionKey = defaults?.sessionKey?.trim() || undefined;
-  const approvalRunningNoticeMs = resolveApprovalRunningNoticeMs(defaults?.approvalRunningNoticeMs);
+  const approvalRunningNoticeMs = resolveApprovalRunningNoticeMs(
+    defaults?.approvalRunningNoticeMs,
+  );
   // Derive agentId only when sessionKey is an agent session key.
   const parsedAgentSession = parseAgentSessionKey(defaults?.sessionKey);
   const agentId =
     defaults?.agentId ??
-    (parsedAgentSession ? resolveAgentIdFromSessionKey(defaults?.sessionKey) : undefined);
+    (parsedAgentSession
+      ? resolveAgentIdFromSessionKey(defaults?.sessionKey)
+      : undefined);
 
   return {
     name: "exec",
@@ -761,15 +816,24 @@ export function createExecTool(
       const backgroundRequested = params.background === true;
       const yieldRequested = typeof params.yieldMs === "number";
       if (!allowBackground && (backgroundRequested || yieldRequested)) {
-        warnings.push("Warning: background execution is disabled; running synchronously.");
+        warnings.push(
+          "Warning: background execution is disabled; running synchronously.",
+        );
       }
       const yieldWindow = allowBackground
         ? backgroundRequested
           ? 0
-          : clampNumber(params.yieldMs ?? defaultBackgroundMs, defaultBackgroundMs, 10, 120_000)
+          : clampNumber(
+              params.yieldMs ?? defaultBackgroundMs,
+              defaultBackgroundMs,
+              10,
+              120_000,
+            )
         : null;
       const elevatedDefaults = defaults?.elevated;
-      const elevatedAllowed = Boolean(elevatedDefaults?.enabled && elevatedDefaults.allowed);
+      const elevatedAllowed = Boolean(
+        elevatedDefaults?.enabled && elevatedDefaults.allowed,
+      );
       const elevatedDefaultMode =
         elevatedDefaults?.defaultLevel === "full"
           ? "full"
@@ -778,7 +842,9 @@ export function createExecTool(
             : elevatedDefaults?.defaultLevel === "on"
               ? "ask"
               : "off";
-      const effectiveDefaultMode = elevatedAllowed ? elevatedDefaultMode : "off";
+      const effectiveDefaultMode = elevatedAllowed
+        ? elevatedDefaultMode
+        : "off";
       const elevatedMode =
         typeof params.elevated === "boolean"
           ? params.elevated
@@ -798,7 +864,9 @@ export function createExecTool(
           if (provider) contextParts.push(`provider=${provider}`);
           if (sessionKey) contextParts.push(`session=${sessionKey}`);
           if (!elevatedDefaults?.enabled) {
-            gates.push("enabled (tools.elevated.enabled / agents.list[].tools.elevated.enabled)");
+            gates.push(
+              "enabled (tools.elevated.enabled / agents.list[].tools.elevated.enabled)",
+            );
           } else {
             gates.push(
               "allowFrom (tools.elevated.allowFrom.<provider> / agents.list[].tools.elevated.allowFrom.<provider>)",
@@ -808,7 +876,9 @@ export function createExecTool(
             [
               `elevated is not available right now (runtime=${runtime}).`,
               `Failing gates: ${gates.join(", ")}`,
-              contextParts.length > 0 ? `Context: ${contextParts.join(" ")}` : undefined,
+              contextParts.length > 0
+                ? `Context: ${contextParts.join(" ")}`
+                : undefined,
               "Fix-it keys:",
               "- tools.elevated.enabled",
               "- tools.elevated.allowFrom.<provider>",
@@ -821,12 +891,18 @@ export function createExecTool(
         }
       }
       if (elevatedRequested) {
-        logInfo(`exec: elevated command ${truncateMiddle(params.command, 120)}`);
+        logInfo(
+          `exec: elevated command ${truncateMiddle(params.command, 120)}`,
+        );
       }
       const configuredHost = defaults?.host ?? "sandbox";
       const requestedHost = normalizeExecHost(params.host) ?? null;
       let host: ExecHost = requestedHost ?? configuredHost;
-      if (!elevatedRequested && requestedHost && requestedHost !== configuredHost) {
+      if (
+        !elevatedRequested &&
+        requestedHost &&
+        requestedHost !== configuredHost
+      ) {
         throw new Error(
           `exec host not allowed (requested ${renderExecHostLabel(requestedHost)}; ` +
             `configure tools.exec.host=${renderExecHostLabel(configuredHost)} to allow).`,
@@ -836,9 +912,13 @@ export function createExecTool(
         host = "gateway";
       }
 
-      const configuredSecurity = defaults?.security ?? (host === "sandbox" ? "deny" : "allowlist");
+      const configuredSecurity =
+        defaults?.security ?? (host === "sandbox" ? "deny" : "allowlist");
       const requestedSecurity = normalizeExecSecurity(params.security);
-      let security = minSecurity(configuredSecurity, requestedSecurity ?? configuredSecurity);
+      let security = minSecurity(
+        configuredSecurity,
+        requestedSecurity ?? configuredSecurity,
+      );
       if (elevatedRequested && elevatedMode === "full") {
         security = "full";
       }
@@ -851,7 +931,8 @@ export function createExecTool(
       }
 
       const sandbox = host === "sandbox" ? defaults?.sandbox : undefined;
-      const rawWorkdir = params.workdir?.trim() || defaults?.cwd || process.cwd();
+      const rawWorkdir =
+        params.workdir?.trim() || defaults?.cwd || process.cwd();
       let workdir = rawWorkdir;
       let containerWorkdir = sandbox?.containerWorkdir;
       if (sandbox) {
@@ -867,7 +948,15 @@ export function createExecTool(
       }
 
       const baseEnv = coerceEnv(process.env);
-      const mergedEnv = params.env ? { ...baseEnv, ...params.env } : baseEnv;
+      const sessionPathPart = defaults?.sessionKey
+        ? `/${defaults.sessionKey}`
+        : "/default";
+      const clawdbotEnv = {
+        CLAWDBOT_QMD_URL: `http://localhost:${process.env.CLAWDBOT_GATEWAY_PORT || 18789}/v1/qmd${sessionPathPart}`,
+      };
+      const mergedEnv = params.env
+        ? { ...baseEnv, ...params.env, ...clawdbotEnv }
+        : { ...baseEnv, ...clawdbotEnv };
       const env = sandbox
         ? buildSandboxEnv({
             defaultPath: DEFAULT_PATH,
@@ -928,7 +1017,9 @@ export function createExecTool(
         const argv = buildNodeShellCommand(params.command, nodeInfo?.platform);
         const nodeEnv = params.env ? { ...params.env } : undefined;
         if (nodeEnv) {
-          applyPathPrepend(nodeEnv, defaultPathPrepend, { requireExisting: true });
+          applyPathPrepend(nodeEnv, defaultPathPrepend, {
+            requireExisting: true,
+          });
         }
         const baseAllowlistEval = evaluateShellAllowlist({
           command: params.command,
@@ -939,7 +1030,11 @@ export function createExecTool(
         });
         let analysisOk = baseAllowlistEval.analysisOk;
         let allowlistSatisfied = false;
-        if (hostAsk === "on-miss" && hostSecurity === "allowlist" && analysisOk) {
+        if (
+          hostAsk === "on-miss" &&
+          hostSecurity === "allowlist" &&
+          analysisOk
+        ) {
           try {
             const approvalsSnapshot = (await callGatewayTool(
               "exec.approvals.node.get",
@@ -980,7 +1075,11 @@ export function createExecTool(
         const commandText = params.command;
         const invokeTimeoutMs = Math.max(
           10_000,
-          (typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec) * 1000 + 5_000,
+          (typeof params.timeout === "number"
+            ? params.timeout
+            : defaultTimeoutSec) *
+            1000 +
+            5_000,
         );
         const buildInvokeParams = (
           approvedByAsk: boolean,
@@ -995,7 +1094,10 @@ export function createExecTool(
               rawCommand: params.command,
               cwd: workdir,
               env: nodeEnv,
-              timeoutMs: typeof params.timeout === "number" ? params.timeout * 1000 : undefined,
+              timeoutMs:
+                typeof params.timeout === "number"
+                  ? params.timeout * 1000
+                  : undefined,
               agentId,
               sessionKey: defaults?.sessionKey,
               approved: approvedByAsk,
@@ -1010,8 +1112,13 @@ export function createExecTool(
           const approvalSlug = createApprovalSlug(approvalId);
           const expiresAtMs = Date.now() + DEFAULT_APPROVAL_TIMEOUT_MS;
           const contextKey = `exec:${approvalId}`;
-          const noticeSeconds = Math.max(1, Math.round(approvalRunningNoticeMs / 1000));
-          const warningText = warnings.length ? `${warnings.join("\n")}\n\n` : "";
+          const noticeSeconds = Math.max(
+            1,
+            Math.round(approvalRunningNoticeMs / 1000),
+          );
+          const warningText = warnings.length
+            ? `${warnings.join("\n")}\n\n`
+            : "";
 
           void (async () => {
             let decision: string | null = null;
@@ -1150,7 +1257,9 @@ export function createExecTool(
             status: payload.success ? "completed" : "failed",
             exitCode: payload.exitCode ?? null,
             durationMs: Date.now() - startedAt,
-            aggregated: [payload.stdout, payload.stderr, payload.error].filter(Boolean).join("\n"),
+            aggregated: [payload.stdout, payload.stderr, payload.error]
+              .filter(Boolean)
+              .join("\n"),
             cwd: workdir,
           } satisfies ExecToolDetails,
         };
@@ -1174,7 +1283,9 @@ export function createExecTool(
         const allowlistMatches = allowlistEval.allowlistMatches;
         const analysisOk = allowlistEval.analysisOk;
         const allowlistSatisfied =
-          hostSecurity === "allowlist" && analysisOk ? allowlistEval.allowlistSatisfied : false;
+          hostSecurity === "allowlist" && analysisOk
+            ? allowlistEval.allowlistSatisfied
+            : false;
         const requiresAsk = requiresExecApproval({
           ask: hostAsk,
           security: hostSecurity,
@@ -1187,12 +1298,20 @@ export function createExecTool(
           const approvalSlug = createApprovalSlug(approvalId);
           const expiresAtMs = Date.now() + DEFAULT_APPROVAL_TIMEOUT_MS;
           const contextKey = `exec:${approvalId}`;
-          const resolvedPath = allowlistEval.segments[0]?.resolution?.resolvedPath;
-          const noticeSeconds = Math.max(1, Math.round(approvalRunningNoticeMs / 1000));
+          const resolvedPath =
+            allowlistEval.segments[0]?.resolution?.resolvedPath;
+          const noticeSeconds = Math.max(
+            1,
+            Math.round(approvalRunningNoticeMs / 1000),
+          );
           const commandText = params.command;
           const effectiveTimeout =
-            typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec;
-          const warningText = warnings.length ? `${warnings.join("\n")}\n\n` : "";
+            typeof params.timeout === "number"
+              ? params.timeout
+              : defaultTimeoutSec;
+          const warningText = warnings.length
+            ? `${warnings.join("\n")}\n\n`
+            : "";
 
           void (async () => {
             let decision: string | null = null;
@@ -1329,11 +1448,16 @@ export function createExecTool(
             const output = normalizeNotifyOutput(
               tail(outcome.aggregated || "", DEFAULT_NOTIFY_TAIL_CHARS),
             );
-            const exitLabel = outcome.timedOut ? "timeout" : `code ${outcome.exitCode ?? "?"}`;
+            const exitLabel = outcome.timedOut
+              ? "timeout"
+              : `code ${outcome.exitCode ?? "?"}`;
             const summary = output
               ? `Exec finished (gateway id=${approvalId}, session=${run.session.id}, ${exitLabel})\n${output}`
               : `Exec finished (gateway id=${approvalId}, session=${run.session.id}, ${exitLabel})`;
-            emitExecSystemEvent(summary, { sessionKey: notifySessionKey, contextKey });
+            emitExecSystemEvent(summary, {
+              sessionKey: notifySessionKey,
+              contextKey,
+            });
           })();
 
           return {
@@ -1358,7 +1482,10 @@ export function createExecTool(
           };
         }
 
-        if (hostSecurity === "allowlist" && (!analysisOk || !allowlistSatisfied)) {
+        if (
+          hostSecurity === "allowlist" &&
+          (!analysisOk || !allowlistSatisfied)
+        ) {
           throw new Error("exec denied: allowlist miss");
         }
 
@@ -1380,7 +1507,8 @@ export function createExecTool(
 
       const effectiveTimeout =
         typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec;
-      const getWarningText = () => (warnings.length ? `${warnings.join("\n")}\n\n` : "");
+      const getWarningText = () =>
+        warnings.length ? `${warnings.join("\n")}\n\n` : "";
       const usePty = params.pty === true && !sandbox;
       const run = await runExecProcess({
         command: params.command,
@@ -1413,81 +1541,83 @@ export function createExecTool(
         signal.addEventListener("abort", onAbortSignal, { once: true });
       }
 
-      return new Promise<AgentToolResult<ExecToolDetails>>((resolve, reject) => {
-        const resolveRunning = () =>
-          resolve({
-            content: [
-              {
-                type: "text",
-                text:
-                  `${getWarningText()}` +
-                  `Command still running (session ${run.session.id}, pid ${
-                    run.session.pid ?? "n/a"
-                  }). ` +
-                  "Use process (list/poll/log/write/kill/clear/remove) for follow-up.",
-              },
-            ],
-            details: {
-              status: "running",
-              sessionId: run.session.id,
-              pid: run.session.pid ?? undefined,
-              startedAt: run.startedAt,
-              cwd: run.session.cwd,
-              tail: run.session.tail,
-            },
-          });
-
-        const onYieldNow = () => {
-          if (yieldTimer) clearTimeout(yieldTimer);
-          if (yielded) return;
-          yielded = true;
-          markBackgrounded(run.session);
-          resolveRunning();
-        };
-
-        if (allowBackground && yieldWindow !== null) {
-          if (yieldWindow === 0) {
-            onYieldNow();
-          } else {
-            yieldTimer = setTimeout(() => {
-              if (yielded) return;
-              yielded = true;
-              markBackgrounded(run.session);
-              resolveRunning();
-            }, yieldWindow);
-          }
-        }
-
-        run.promise
-          .then((outcome) => {
-            if (yieldTimer) clearTimeout(yieldTimer);
-            if (yielded || run.session.backgrounded) return;
-            if (outcome.status === "failed") {
-              reject(new Error(outcome.reason ?? "Command failed."));
-              return;
-            }
+      return new Promise<AgentToolResult<ExecToolDetails>>(
+        (resolve, reject) => {
+          const resolveRunning = () =>
             resolve({
               content: [
                 {
                   type: "text",
-                  text: `${getWarningText()}${outcome.aggregated || "(no output)"}`,
+                  text:
+                    `${getWarningText()}` +
+                    `Command still running (session ${run.session.id}, pid ${
+                      run.session.pid ?? "n/a"
+                    }). ` +
+                    "Use process (list/poll/log/write/kill/clear/remove) for follow-up.",
                 },
               ],
               details: {
-                status: "completed",
-                exitCode: outcome.exitCode ?? 0,
-                durationMs: outcome.durationMs,
-                aggregated: outcome.aggregated,
+                status: "running",
+                sessionId: run.session.id,
+                pid: run.session.pid ?? undefined,
+                startedAt: run.startedAt,
                 cwd: run.session.cwd,
+                tail: run.session.tail,
               },
             });
-          })
-          .catch((err) => {
+
+          const onYieldNow = () => {
             if (yieldTimer) clearTimeout(yieldTimer);
-            if (yielded || run.session.backgrounded) return;
-            reject(err as Error);
-          });
-      });
+            if (yielded) return;
+            yielded = true;
+            markBackgrounded(run.session);
+            resolveRunning();
+          };
+
+          if (allowBackground && yieldWindow !== null) {
+            if (yieldWindow === 0) {
+              onYieldNow();
+            } else {
+              yieldTimer = setTimeout(() => {
+                if (yielded) return;
+                yielded = true;
+                markBackgrounded(run.session);
+                resolveRunning();
+              }, yieldWindow);
+            }
+          }
+
+          run.promise
+            .then((outcome) => {
+              if (yieldTimer) clearTimeout(yieldTimer);
+              if (yielded || run.session.backgrounded) return;
+              if (outcome.status === "failed") {
+                reject(new Error(outcome.reason ?? "Command failed."));
+                return;
+              }
+              resolve({
+                content: [
+                  {
+                    type: "text",
+                    text: `${getWarningText()}${outcome.aggregated || "(no output)"}`,
+                  },
+                ],
+                details: {
+                  status: "completed",
+                  exitCode: outcome.exitCode ?? 0,
+                  durationMs: outcome.durationMs,
+                  aggregated: outcome.aggregated,
+                  cwd: run.session.cwd,
+                },
+              });
+            })
+            .catch((err) => {
+              if (yieldTimer) clearTimeout(yieldTimer);
+              if (yielded || run.session.backgrounded) return;
+              reject(err as Error);
+            });
+        },
+      );
     },
   };
 }

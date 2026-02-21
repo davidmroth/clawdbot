@@ -32,11 +32,15 @@ import { sendMethodNotAllowed, sendUnauthorized } from "./http-common.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
+import { handleQmdProxyHttpRequest } from "./server-methods/qmd-proxy.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
 type HookDispatchers = {
-  dispatchWakeHook: (value: { text: string; mode: "now" | "next-heartbeat" }) => void;
+  dispatchWakeHook: (value: {
+    text: string;
+    mode: "now" | "next-heartbeat";
+  }) => void;
   dispatchAgentHook: (value: {
     message: string;
     name: string;
@@ -58,7 +62,10 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-export type HooksRequestHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
+export type HooksRequestHandler = (
+  req: IncomingMessage,
+  res: ServerResponse,
+) => Promise<boolean>;
 
 export function createHooksRequestHandler(
   opts: {
@@ -68,7 +75,14 @@ export function createHooksRequestHandler(
     logHooks: SubsystemLogger;
   } & HookDispatchers,
 ): HooksRequestHandler {
-  const { getHooksConfig, bindHost, port, logHooks, dispatchAgentHook, dispatchWakeHook } = opts;
+  const {
+    getHooksConfig,
+    bindHost,
+    port,
+    logHooks,
+    dispatchAgentHook,
+    dispatchWakeHook,
+  } = opts;
   return async (req, res) => {
     const hooksConfig = getHooksConfig();
     if (!hooksConfig) return false;
@@ -116,11 +130,14 @@ export function createHooksRequestHandler(
       return true;
     }
 
-    const payload = typeof body.value === "object" && body.value !== null ? body.value : {};
+    const payload =
+      typeof body.value === "object" && body.value !== null ? body.value : {};
     const headers = normalizeHookHeaders(req);
 
     if (subPath === "wake") {
-      const normalized = normalizeWakePayload(payload as Record<string, unknown>);
+      const normalized = normalizeWakePayload(
+        payload as Record<string, unknown>,
+      );
       if (!normalized.ok) {
         sendJson(res, 400, { ok: false, error: normalized.error });
         return true;
@@ -131,7 +148,9 @@ export function createHooksRequestHandler(
     }
 
     if (subPath === "agent") {
-      const normalized = normalizeAgentPayload(payload as Record<string, unknown>);
+      const normalized = normalizeAgentPayload(
+        payload as Record<string, unknown>,
+      );
       if (!normalized.ok) {
         sendJson(res, 400, { ok: false, error: normalized.error });
         return true;
@@ -159,7 +178,7 @@ export function createHooksRequestHandler(
             res.end();
             return true;
           }
-    if (mapped.action.kind === "wake") {
+          if (mapped.action.kind === "wake") {
             dispatchWakeHook({
               text: mapped.action.text,
               mode: mapped.action.mode,
@@ -183,7 +202,8 @@ export function createHooksRequestHandler(
             model: mapped.action.model,
             thinking: mapped.action.thinking,
             timeoutSeconds: mapped.action.timeoutSeconds,
-            allowUnsafeExternalContent: mapped.action.allowUnsafeExternalContent,
+            allowUnsafeExternalContent:
+              mapped.action.allowUnsafeExternalContent,
           });
           sendJson(res, 202, { ok: true, runId });
           return true;
@@ -238,28 +258,38 @@ export function createGatewayHttpServer(opts: {
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
 
       // PATCH: Add /restart endpoint
-      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      const url = new URL(
+        req.url ?? "/",
+        `http://${req.headers.host ?? "localhost"}`,
+      );
       if (url.pathname === "/v1/restart" || url.pathname === "/restart") {
-          if (req.method !== "POST") {
-              sendMethodNotAllowed(res, "POST");
-              return;
-          }
-          const token = getBearerToken(req);
-          const authResult = await authorizeGatewayConnect({
-              auth: resolvedAuth,
-              connectAuth: token ? { token, password: token } : null,
-              req,
-              trustedProxies,
-          });
-          if (!authResult.ok) {
-              sendUnauthorized(res);
-              return;
-          }
-          res.statusCode = 200;
-          res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ ok: true, status: "restarting" }));
-          setTimeout(() => process.exit(1), 200);
+        if (req.method !== "POST") {
+          sendMethodNotAllowed(res, "POST");
           return;
+        }
+        const token = getBearerToken(req);
+        const authResult = await authorizeGatewayConnect({
+          auth: resolvedAuth,
+          connectAuth: token ? { token, password: token } : null,
+          req,
+          trustedProxies,
+        });
+        if (!authResult.ok) {
+          sendUnauthorized(res);
+          return;
+        }
+        // logCore.warn("Gateway HTTP server received /v1/restart request; exiting process."); // Original line was commented out or not present
+        sendJson(res, 200, { ok: true, status: "restarting" });
+
+        setTimeout(() => {
+          process.exit(0);
+        }, 100);
+        return;
+      }
+
+      if (url.pathname.startsWith("/v1/qmd/")) {
+        const handled = await handleQmdProxyHttpRequest(req, res);
+        if (handled) return;
       }
 
       if (await handleHooksRequest(req, res)) return;

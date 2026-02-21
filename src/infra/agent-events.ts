@@ -30,7 +30,7 @@ export type RecallMeta = {
 export type AgentRunContext = {
   sessionKey?: string;
   verboseLevel?: VerboseLevel;
-  runSource?: string; // "user" | "recall" | "heartbeat" | "cron" | "consciousness"
+  runSource?: string; // "user" | "heartbeat" | "cron" | "consciousness"
   recallMeta?: RecallMeta;
 };
 

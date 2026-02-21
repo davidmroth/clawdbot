@@ -23,6 +23,11 @@ export function createLlmDebugLogger(params: {
       return (model, context, options) => {
         // 1. Emit Request Event
         const reqStart = Date.now();
+        const ctx = getAgentRunContext(params.runId);
+        console.log(
+          `[llm-debug-logger] runId=${params.runId} stream=llm-req runSource="${ctx?.runSource}"`,
+        );
+
         const requestData = {
           provider: params.provider,
           model: params.modelId,
@@ -31,8 +36,8 @@ export function createLlmDebugLogger(params: {
           system: params.systemPrompt ?? (context as any).system,
           tools: (context as any).tools,
           config: (context as any).config,
-          runSource: getAgentRunContext(params.runId)?.runSource,
-          recallMeta: getAgentRunContext(params.runId)?.recallMeta,
+          runSource: ctx?.runSource,
+          recallMeta: ctx?.recallMeta,
         };
 
         emitAgentEvent({

@@ -194,10 +194,8 @@ export function getActiveEmbeddedRunKeys(): string[] {
   return Array.from(ACTIVE_EMBEDDED_RUNS.keys());
 }
 
-export function tagRunWithRecall(sessionKey: string): void {
-  const handle = ACTIVE_EMBEDDED_RUNS.get(sessionKey);
-  if (!handle?.runId) return;
-  registerAgentRunContext(handle.runId, { runSource: "recall" });
+export function getEmbeddedRunId(sessionKey: string): string | undefined {
+  return ACTIVE_EMBEDDED_RUNS.get(sessionKey)?.runId;
 }
 
 export function tagRunWithRecallMeta(
