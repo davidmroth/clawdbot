@@ -85,7 +85,10 @@ export function startQmdObserver(broadcaster: Broadcaster): {
       };
 
       ws.onerror = (err: Event) => {
-        log.warn("QMD stream error", { url: WS_URL });
+        log.warn("QMD stream error, will reconnect", { url: WS_URL });
+        connected = false;
+        broadcaster.broadcast("qmd/status", { connected: false });
+        scheduleReconnect();
       };
     } catch (err) {
       log.error("Failed to create WebSocket", { error: String(err) });
