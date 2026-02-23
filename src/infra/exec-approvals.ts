@@ -63,7 +63,17 @@ const DEFAULT_ASK_FALLBACK: ExecSecurity = "deny";
 const DEFAULT_AUTO_ALLOW_SKILLS = false;
 const DEFAULT_SOCKET = "~/.clawdbot/exec-approvals.sock";
 const DEFAULT_FILE = "~/.clawdbot/exec-approvals.json";
-export const DEFAULT_SAFE_BINS = ["jq", "grep", "cut", "sort", "uniq", "head", "tail", "tr", "wc"];
+export const DEFAULT_SAFE_BINS = [
+  "jq",
+  "grep",
+  "cut",
+  "sort",
+  "uniq",
+  "head",
+  "tail",
+  "tr",
+  "wc",
+];
 
 function hashExecApprovalsRaw(raw: string | null): string {
   return crypto
@@ -134,14 +144,18 @@ function ensureAllowlistIds(
   return changed ? next : allowlist;
 }
 
-export function normalizeExecApprovals(file: ExecApprovalsFile): ExecApprovalsFile {
+export function normalizeExecApprovals(
+  file: ExecApprovalsFile,
+): ExecApprovalsFile {
   const socketPath = file.socket?.path?.trim();
   const token = file.socket?.token?.trim();
   const agents = { ...file.agents };
   const legacyDefault = agents.default;
   if (legacyDefault) {
     const main = agents[DEFAULT_AGENT_ID];
-    agents[DEFAULT_AGENT_ID] = main ? mergeLegacyAgent(main, legacyDefault) : legacyDefault;
+    agents[DEFAULT_AGENT_ID] = main
+      ? mergeLegacyAgent(main, legacyDefault)
+      : legacyDefault;
     delete agents.default;
   }
   for (const [key, agent] of Object.entries(agents)) {
@@ -223,7 +237,9 @@ export function loadExecApprovals(): ExecApprovalsFile {
 export function saveExecApprovals(file: ExecApprovalsFile) {
   const filePath = resolveExecApprovalsPath();
   ensureDir(filePath);
-  fs.writeFileSync(filePath, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
+  fs.writeFileSync(filePath, `${JSON.stringify(file, null, 2)}\n`, {
+    mode: 0o600,
+  });
   try {
     fs.chmodSync(filePath, 0o600);
   } catch {
@@ -239,7 +255,10 @@ export function ensureExecApprovals(): ExecApprovalsFile {
   const updated: ExecApprovalsFile = {
     ...next,
     socket: {
-      path: socketPath && socketPath.length > 0 ? socketPath : resolveExecApprovalsSocketPath(),
+      path:
+        socketPath && socketPath.length > 0
+          ? socketPath
+          : resolveExecApprovalsSocketPath(),
       token: token && token.length > 0 ? token : generateToken(),
     },
   };
@@ -247,13 +266,18 @@ export function ensureExecApprovals(): ExecApprovalsFile {
   return updated;
 }
 
-function normalizeSecurity(value: ExecSecurity | undefined, fallback: ExecSecurity): ExecSecurity {
-  if (value === "allowlist" || value === "full" || value === "deny") return value;
+function normalizeSecurity(
+  value: ExecSecurity | undefined,
+  fallback: ExecSecurity,
+): ExecSecurity {
+  if (value === "allowlist" || value === "full" || value === "deny")
+    return value;
   return fallback;
 }
 
 function normalizeAsk(value: ExecAsk | undefined, fallback: ExecAsk): ExecAsk {
-  if (value === "always" || value === "off" || value === "on-miss") return value;
+  if (value === "always" || value === "off" || value === "on-miss")
+    return value;
   return fallback;
 }
 
@@ -274,7 +298,9 @@ export function resolveExecApprovals(
     agentId,
     overrides,
     path: resolveExecApprovalsPath(),
-    socketPath: expandHome(file.socket?.path ?? resolveExecApprovalsSocketPath()),
+    socketPath: expandHome(
+      file.socket?.path ?? resolveExecApprovalsSocketPath(),
+    ),
     token: file.socket?.token ?? "",
   });
 }
@@ -292,10 +318,10 @@ export function resolveExecApprovalsFromFile(params: {
   const agentKey = params.agentId ?? DEFAULT_AGENT_ID;
   const agent = file.agents?.[agentKey] ?? {};
   const wildcard = file.agents?.["*"] ?? {};
-  const fallbackSecurity = params.overrides?.security ?? DEFAULT_SECURITY;
-  const fallbackAsk = params.overrides?.ask ?? DEFAULT_ASK;
-  const fallbackAskFallback = params.overrides?.askFallback ?? DEFAULT_ASK_FALLBACK;
-  const fallbackAutoAllowSkills = params.overrides?.autoAllowSkills ?? DEFAULT_AUTO_ALLOW_SKILLS;
+  const fallbackSecurity = DEFAULT_SECURITY;
+  const fallbackAsk = DEFAULT_ASK;
+  const fallbackAskFallback = DEFAULT_ASK_FALLBACK;
+  const fallbackAutoAllowSkills = DEFAULT_AUTO_ALLOW_SKILLS;
   const resolvedDefaults: Required<ExecApprovalsDefaults> = {
     security: normalizeSecurity(defaults.security, fallbackSecurity),
     ask: normalizeAsk(defaults.ask, fallbackAsk),
@@ -303,20 +329,27 @@ export function resolveExecApprovalsFromFile(params: {
       defaults.askFallback ?? fallbackAskFallback,
       fallbackAskFallback,
     ),
-    autoAllowSkills: Boolean(defaults.autoAllowSkills ?? fallbackAutoAllowSkills),
+    autoAllowSkills: Boolean(
+      defaults.autoAllowSkills ?? fallbackAutoAllowSkills,
+    ),
   };
   const resolvedAgent: Required<ExecApprovalsDefaults> = {
     security: normalizeSecurity(
       agent.security ?? wildcard.security ?? resolvedDefaults.security,
       resolvedDefaults.security,
     ),
-    ask: normalizeAsk(agent.ask ?? wildcard.ask ?? resolvedDefaults.ask, resolvedDefaults.ask),
+    ask: normalizeAsk(
+      agent.ask ?? wildcard.ask ?? resolvedDefaults.ask,
+      resolvedDefaults.ask,
+    ),
     askFallback: normalizeSecurity(
       agent.askFallback ?? wildcard.askFallback ?? resolvedDefaults.askFallback,
       resolvedDefaults.askFallback,
     ),
     autoAllowSkills: Boolean(
-      agent.autoAllowSkills ?? wildcard.autoAllowSkills ?? resolvedDefaults.autoAllowSkills,
+      agent.autoAllowSkills ??
+      wildcard.autoAllowSkills ??
+      resolvedDefaults.autoAllowSkills,
     ),
   };
   const allowlist = [
@@ -326,7 +359,9 @@ export function resolveExecApprovalsFromFile(params: {
   return {
     path: params.path ?? resolveExecApprovalsPath(),
     socketPath: expandHome(
-      params.socketPath ?? file.socket?.path ?? resolveExecApprovalsSocketPath(),
+      params.socketPath ??
+        file.socket?.path ??
+        resolveExecApprovalsSocketPath(),
     ),
     token: params.token ?? file.socket?.token ?? "",
     defaults: resolvedDefaults,
@@ -368,8 +403,14 @@ function parseFirstToken(command: string): string | null {
   return match ? match[0] : null;
 }
 
-function resolveExecutablePath(rawExecutable: string, cwd?: string, env?: NodeJS.ProcessEnv) {
-  const expanded = rawExecutable.startsWith("~") ? expandHome(rawExecutable) : rawExecutable;
+function resolveExecutablePath(
+  rawExecutable: string,
+  cwd?: string,
+  env?: NodeJS.ProcessEnv,
+) {
+  const expanded = rawExecutable.startsWith("~")
+    ? expandHome(rawExecutable)
+    : rawExecutable;
   if (expanded.includes("/") || expanded.includes("\\")) {
     if (path.isAbsolute(expanded)) {
       return isExecutableFile(expanded) ? expanded : undefined;
@@ -378,9 +419,11 @@ function resolveExecutablePath(rawExecutable: string, cwd?: string, env?: NodeJS
     const candidate = path.resolve(base, expanded);
     return isExecutableFile(candidate) ? candidate : undefined;
   }
-  const envPath = env?.PATH ?? env?.Path ?? process.env.PATH ?? process.env.Path ?? "";
+  const envPath =
+    env?.PATH ?? env?.Path ?? process.env.PATH ?? process.env.Path ?? "";
   const entries = envPath.split(path.delimiter).filter(Boolean);
-  const hasExtension = process.platform === "win32" && path.extname(expanded).length > 0;
+  const hasExtension =
+    process.platform === "win32" && path.extname(expanded).length > 0;
   const extensions =
     process.platform === "win32"
       ? hasExtension
@@ -412,7 +455,9 @@ export function resolveCommandResolution(
   const rawExecutable = parseFirstToken(command);
   if (!rawExecutable) return null;
   const resolvedPath = resolveExecutablePath(rawExecutable, cwd, env);
-  const executableName = resolvedPath ? path.basename(resolvedPath) : rawExecutable;
+  const executableName = resolvedPath
+    ? path.basename(resolvedPath)
+    : rawExecutable;
   return { rawExecutable, resolvedPath, executableName };
 }
 
@@ -424,7 +469,9 @@ export function resolveCommandResolutionFromArgv(
   const rawExecutable = argv[0]?.trim();
   if (!rawExecutable) return null;
   const resolvedPath = resolveExecutablePath(rawExecutable, cwd, env);
-  const executableName = resolvedPath ? path.basename(resolvedPath) : rawExecutable;
+  const executableName = resolvedPath
+    ? path.basename(resolvedPath)
+    : rawExecutable;
   return { rawExecutable, resolvedPath, executableName };
 }
 
@@ -513,7 +560,8 @@ export function matchAllowlist(
   for (const entry of entries) {
     const pattern = entry.pattern?.trim();
     if (!pattern) continue;
-    const hasPath = pattern.includes("/") || pattern.includes("\\") || pattern.includes("~");
+    const hasPath =
+      pattern.includes("/") || pattern.includes("\\") || pattern.includes("~");
     if (!hasPath) continue;
     if (matchesPattern(pattern, resolvedPath)) return entry;
   }
@@ -533,7 +581,15 @@ export type ExecCommandAnalysis = {
   chains?: ExecCommandSegment[][]; // Segments grouped by chain operator (&&, ||, ;)
 };
 
-const DISALLOWED_PIPELINE_TOKENS = new Set([">", "<", "`", "\n", "\r", "(", ")"]);
+const DISALLOWED_PIPELINE_TOKENS = new Set([
+  ">",
+  "<",
+  "`",
+  "\n",
+  "\r",
+  "(",
+  ")",
+]);
 
 type IteratorAction = "split" | "skip" | "include" | { reject: string };
 
@@ -547,8 +603,14 @@ type IteratorAction = "split" | "skip" | "include" | { reject: string };
  */
 function iterateQuoteAware(
   command: string,
-  onChar: (ch: string, next: string | undefined, index: number) => IteratorAction,
-): { ok: true; parts: string[]; hasSplit: boolean } | { ok: false; reason: string } {
+  onChar: (
+    ch: string,
+    next: string | undefined,
+    index: number,
+  ) => IteratorAction,
+):
+  | { ok: true; parts: string[]; hasSplit: boolean }
+  | { ok: false; reason: string } {
   const parts: string[] = [];
   let buf = "";
   let inSingle = false;
@@ -621,7 +683,11 @@ function iterateQuoteAware(
   return { ok: true, parts, hasSplit };
 }
 
-function splitShellPipeline(command: string): { ok: boolean; reason?: string; segments: string[] } {
+function splitShellPipeline(command: string): {
+  ok: boolean;
+  reason?: string;
+  segments: string[];
+} {
   let emptySegment = false;
   const result = iterateQuoteAware(command, (ch, next) => {
     if (ch === "|" && next === "|") {
@@ -653,7 +719,8 @@ function splitShellPipeline(command: string): { ok: boolean; reason?: string; se
   if (emptySegment || result.parts.length === 0) {
     return {
       ok: false,
-      reason: result.parts.length === 0 ? "empty command" : "empty pipeline segment",
+      reason:
+        result.parts.length === 0 ? "empty command" : "empty pipeline segment",
       segments: [],
     };
   }
@@ -759,9 +826,17 @@ export function analyzeShellCommand(params: {
       if (!pipelineSplit.ok) {
         return { ok: false, reason: pipelineSplit.reason, segments: [] };
       }
-      const segments = parseSegmentsFromParts(pipelineSplit.segments, params.cwd, params.env);
+      const segments = parseSegmentsFromParts(
+        pipelineSplit.segments,
+        params.cwd,
+        params.env,
+      );
       if (!segments) {
-        return { ok: false, reason: "unable to parse shell segment", segments: [] };
+        return {
+          ok: false,
+          reason: "unable to parse shell segment",
+          segments: [],
+        };
       }
       chains.push(segments);
       allSegments.push(...segments);
@@ -775,7 +850,11 @@ export function analyzeShellCommand(params: {
   if (!split.ok) {
     return { ok: false, reason: split.reason, segments: [] };
   }
-  const segments = parseSegmentsFromParts(split.segments, params.cwd, params.env);
+  const segments = parseSegmentsFromParts(
+    split.segments,
+    params.cwd,
+    params.env,
+  );
   if (!segments) {
     return { ok: false, reason: "unable to parse shell segment", segments: [] };
   }
@@ -797,7 +876,11 @@ export function analyzeArgvCommand(params: {
       {
         raw: argv.join(" "),
         argv,
-        resolution: resolveCommandResolutionFromArgv(argv, params.cwd, params.env),
+        resolution: resolveCommandResolutionFromArgv(
+          argv,
+          params.cwd,
+          params.env,
+        ),
       },
     ],
   };
@@ -807,7 +890,12 @@ function isPathLikeToken(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
   if (trimmed === "-") return false;
-  if (trimmed.startsWith("./") || trimmed.startsWith("../") || trimmed.startsWith("~")) return true;
+  if (
+    trimmed.startsWith("./") ||
+    trimmed.startsWith("../") ||
+    trimmed.startsWith("~")
+  )
+    return true;
   if (trimmed.startsWith("/")) return true;
   return /^[A-Za-z]:[\\/]/.test(trimmed);
 }
@@ -846,7 +934,8 @@ export function isSafeBinUsage(params: {
   if (!execName) return false;
   const matchesSafeBin =
     params.safeBins.has(execName) ||
-    (process.platform === "win32" && params.safeBins.has(path.parse(execName).name));
+    (process.platform === "win32" &&
+      params.safeBins.has(path.parse(execName).name));
   if (!matchesSafeBin) return false;
   if (!resolution?.resolvedPath) return false;
   const cwd = params.cwd ?? process.cwd();
@@ -860,7 +949,10 @@ export function isSafeBinUsage(params: {
       const eqIndex = token.indexOf("=");
       if (eqIndex > 0) {
         const value = token.slice(eqIndex + 1);
-        if (value && (isPathLikeToken(value) || exists(path.resolve(cwd, value)))) {
+        if (
+          value &&
+          (isPathLikeToken(value) || exists(path.resolve(cwd, value)))
+        ) {
           return false;
         }
       }
@@ -888,10 +980,14 @@ function evaluateSegments(
   },
 ): { satisfied: boolean; matches: ExecAllowlistEntry[] } {
   const matches: ExecAllowlistEntry[] = [];
-  const allowSkills = params.autoAllowSkills === true && (params.skillBins?.size ?? 0) > 0;
+  const allowSkills =
+    params.autoAllowSkills === true && (params.skillBins?.size ?? 0) > 0;
 
   const satisfied = segments.every((segment) => {
-    const candidatePath = resolveAllowlistCandidatePath(segment.resolution, params.cwd);
+    const candidatePath = resolveAllowlistCandidatePath(
+      segment.resolution,
+      params.cwd,
+    );
     const candidateResolution =
       candidatePath && segment.resolution
         ? { ...segment.resolution, resolvedPath: candidatePath }
@@ -953,7 +1049,10 @@ export function evaluateExecAllowlist(params: {
     skillBins: params.skillBins,
     autoAllowSkills: params.autoAllowSkills,
   });
-  return { allowlistSatisfied: result.satisfied, allowlistMatches: result.matches };
+  return {
+    allowlistSatisfied: result.satisfied,
+    allowlistMatches: result.matches,
+  };
 }
 
 /**
@@ -1189,14 +1288,22 @@ export function addAllowlistEntry(
   const trimmed = pattern.trim();
   if (!trimmed) return;
   if (allowlist.some((entry) => entry.pattern === trimmed)) return;
-  allowlist.push({ id: crypto.randomUUID(), pattern: trimmed, lastUsedAt: Date.now() });
+  allowlist.push({
+    id: crypto.randomUUID(),
+    pattern: trimmed,
+    lastUsedAt: Date.now(),
+  });
   agents[target] = { ...existing, allowlist };
   approvals.agents = agents;
   saveExecApprovals(approvals);
 }
 
 export function minSecurity(a: ExecSecurity, b: ExecSecurity): ExecSecurity {
-  const order: Record<ExecSecurity, number> = { deny: 0, allowlist: 1, full: 2 };
+  const order: Record<ExecSecurity, number> = {
+    deny: 0,
+    allowlist: 1,
+    full: 2,
+  };
   return order[a] <= order[b] ? a : b;
 }
 
@@ -1252,7 +1359,10 @@ export async function requestExecApprovalViaSocket(params: {
         idx = buffer.indexOf("\n");
         if (!line) continue;
         try {
-          const msg = JSON.parse(line) as { type?: string; decision?: ExecApprovalDecision };
+          const msg = JSON.parse(line) as {
+            type?: string;
+            decision?: ExecApprovalDecision;
+          };
           if (msg?.type === "decision" && msg.decision) {
             clearTimeout(timer);
             finish(msg.decision);
