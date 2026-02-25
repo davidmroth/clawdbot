@@ -15,9 +15,10 @@ import type { SignalReactionNotificationMode } from "../config/types.js";
 import { saveMediaBuffer } from "../media/store.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { normalizeE164 } from "../utils.js";
+import { resolveFetch } from "../infra/fetch.js";
 import { waitForTransportReady } from "../infra/transport-ready.js";
 import { resolveSignalAccount } from "./accounts.js";
-import { signalCheck, signalRpcRequest } from "./client.js";
+import { signalCheck } from "./client.js";
 import { spawnSignalDaemon } from "./daemon.js";
 import { isSignalSenderAllowed, type resolveSignalSender } from "./identity.js";
 import { createSignalEventHandler } from "./monitor/event-handler.js";
@@ -202,23 +203,24 @@ async function fetchAttachment(params: {
       `Signal attachment ${attachment.id} exceeds ${(params.maxBytes / (1024 * 1024)).toFixed(0)}MB limit`,
     );
   }
-  const rpcParams: Record<string, unknown> = {
-    id: attachment.id,
-  };
-  if (params.account) rpcParams.account = params.account;
-  if (params.groupId) rpcParams.groupId = params.groupId;
-  else if (params.sender) rpcParams.recipient = params.sender;
-  else return null;
 
-  const result = await signalRpcRequest<{ data?: string }>(
-    "getAttachment",
-    rpcParams,
-    {
-      baseUrl: params.baseUrl,
-    },
-  );
-  if (!result?.data) return null;
-  const buffer = Buffer.from(result.data, "base64");
+  // Fetch attachment directly via the signal-cli-rest-api REST endpoint.
+  // The endpoint returns raw binary (not JSON-RPC), so we bypass signalRpcRequest.
+  const baseUrl = params.baseUrl.trim().replace(/\/+$/, "");
+  const url = `${baseUrl}/v1/attachments/${encodeURIComponent(attachment.id)}`;
+  const fetchImpl = resolveFetch();
+  if (!fetchImpl) {
+    throw new Error("fetch is not available");
+  }
+  const res = await fetchImpl(url, { method: "GET" });
+  if (!res.ok) {
+    throw new Error(
+      `Signal attachment fetch failed (${res.status}): ${await res.text().catch(() => "")}`,
+    );
+  }
+  const arrayBuf = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuf);
+  if (buffer.length === 0) return null;
   const saved = await saveMediaBuffer(
     buffer,
     attachment.contentType ?? undefined,
