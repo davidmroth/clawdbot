@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AIO Sandbox CLI — thin Python wrapper around the sandbox REST API.
+Clawdbot Sandbox CLI — Python wrapper around the custom sandbox REST API.
 
 Usage:
     sandbox.py info
@@ -11,8 +11,12 @@ Usage:
     sandbox.py upload <local_path> <remote_path>
     sandbox.py download <remote_path> [--output <local_path>]
     sandbox.py screenshot [--output <file>]
-    sandbox.py navigate <url>
-    sandbox.py run-code "<code>" [--lang python|javascript] [--session <id>]
+    sandbox.py navigate <url> [--wait-until load|domcontentloaded|networkidle]
+    sandbox.py browser-action <action_type> [--x <n>] [--y <n>] [--text <str>]
+    sandbox.py page-text
+    sandbox.py page-html
+    sandbox.py evaluate "<expression>"
+    sandbox.py run-code "<code>" [--lang python|javascript]
 """
 
 import argparse
@@ -61,8 +65,7 @@ def _exit_on_error(resp: dict):
 
 def cmd_info(_args):
     """Show sandbox context."""
-    data = _get_json("/v1/sandbox")
-    _print_json(data)
+    _print_json(_get_json("/v1/sandbox"))
 
 
 def cmd_exec(args):
@@ -77,7 +80,6 @@ def cmd_exec(args):
 
     data = _post("/v1/shell/exec", payload)
     _exit_on_error(data)
-
     result = data.get("data", data)
 
     if args.run_async:
@@ -106,8 +108,7 @@ def cmd_read(args):
 
     data = _post("/v1/file/read", payload)
     _exit_on_error(data)
-    content = data.get("data", {}).get("content", "")
-    print(content, end="")
+    print(data.get("data", {}).get("content", ""), end="")
 
 
 def cmd_write(args):
@@ -156,7 +157,6 @@ def cmd_download(args):
         timeout=300,
     )
     resp.raise_for_status()
-
     output = args.output or os.path.basename(args.remote_path)
     with open(output, "wb") as f:
         for chunk in resp.iter_content(chunk_size=8192):
@@ -168,7 +168,6 @@ def cmd_screenshot(args):
     """Take a browser screenshot."""
     resp = requests.get(_url("/v1/browser/screenshot"), stream=True, timeout=60)
     resp.raise_for_status()
-
     output = args.output or "/tmp/sandbox_screenshot.png"
     with open(output, "wb") as f:
         for chunk in resp.iter_content(chunk_size=8192):
@@ -178,32 +177,77 @@ def cmd_screenshot(args):
 
 def cmd_navigate(args):
     """Navigate the browser to a URL."""
-    data = _post("/v1/browser/page/navigate", {"url": args.url})
+    payload = {"url": args.url}
+    if args.wait_until:
+        payload["wait_until"] = args.wait_until
+    data = _post("/v1/browser/navigate", payload)
     _exit_on_error(data)
-    print(f"Navigated to {args.url}")
+    print(f"Navigated to {data.get('data', {}).get('url', args.url)}")
+
+
+def cmd_browser_action(args):
+    """Execute a low-level browser action."""
+    payload = {"action_type": args.action_type}
+    if args.x is not None:
+        payload["x"] = args.x
+    if args.y is not None:
+        payload["y"] = args.y
+    if args.text:
+        payload["text"] = args.text
+    if args.key:
+        payload["key"] = args.key
+    if args.keys:
+        payload["keys"] = args.keys.split(",")
+    if args.dx is not None:
+        payload["dx"] = args.dx
+    if args.dy is not None:
+        payload["dy"] = args.dy
+    if args.duration is not None:
+        payload["duration"] = args.duration
+
+    data = _post("/v1/browser/actions", payload)
+    _exit_on_error(data)
+    _print_json(data)
+
+
+def cmd_page_text(_args):
+    """Get page text content."""
+    data = _get_json("/v1/browser/page/text")
+    _exit_on_error(data)
+    print(data.get("data", {}).get("text", ""))
+
+
+def cmd_page_html(_args):
+    """Get page HTML."""
+    data = _get_json("/v1/browser/page/html")
+    _exit_on_error(data)
+    print(data.get("data", {}).get("html", ""))
+
+
+def cmd_evaluate(args):
+    """Evaluate JavaScript in the browser."""
+    data = _post("/v1/browser/page/evaluate", {"expression": args.expression})
+    _exit_on_error(data)
+    print(data.get("data", {}).get("result", ""))
 
 
 def cmd_run_code(args):
-    """Execute code in Jupyter (Python) or Node.js."""
+    """Execute code via a shell command."""
     lang = args.lang or "python"
-
     if lang == "python":
-        payload = {"code": args.code}
-        if args.session:
-            payload["session_id"] = args.session
-        data = _post("/v1/jupyter/execute", payload)
+        shell_cmd = f'python3 -c {json.dumps(args.code)}'
     elif lang == "javascript":
-        payload = {"code": args.code}
-        if args.session:
-            payload["session_id"] = args.session
-            payload["stateful"] = True
-        data = _post("/v1/nodejs/execute", payload)
+        shell_cmd = f'node -e {json.dumps(args.code)}'
     else:
         print(f"Unsupported language: {lang}", file=sys.stderr)
         sys.exit(1)
 
+    data = _post("/v1/shell/exec", {"command": shell_cmd})
     _exit_on_error(data)
-    _print_json(data)
+    result = data.get("data", data)
+    combined = result.get("combined") or result.get("stdout", "")
+    if combined:
+        print(combined, end="")
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +256,7 @@ def cmd_run_code(args):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="AIO Sandbox CLI",
+        description="Clawdbot Sandbox CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="subcommand", help="Available commands")
@@ -227,7 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_exec.add_argument("--async", dest="run_async", action="store_true",
                         help="Run asynchronously")
     p_exec.add_argument("--dir", dest="exec_dir", help="Working directory")
-    p_exec.add_argument("--timeout", type=int, help="Timeout in seconds")
+    p_exec.add_argument("--timeout", type=float, help="Timeout in seconds")
 
     # read
     p_read = sub.add_parser("read", help="Read a file")
@@ -260,18 +304,48 @@ def build_parser() -> argparse.ArgumentParser:
     # screenshot
     p_ss = sub.add_parser("screenshot", help="Take browser screenshot")
     p_ss.add_argument("--output",
-                      help="Output file path (default: /tmp/sandbox_screenshot.png)")
+                      help="Output file (default: /tmp/sandbox_screenshot.png)")
 
     # navigate
     p_nav = sub.add_parser("navigate", help="Navigate browser to URL")
     p_nav.add_argument("url", help="URL to navigate to")
+    p_nav.add_argument("--wait-until", dest="wait_until",
+                       choices=["load", "domcontentloaded", "networkidle"],
+                       default="load", help="Wait condition")
+
+    # browser-action
+    p_ba = sub.add_parser("browser-action",
+                          help="Execute a low-level browser action")
+    p_ba.add_argument("action_type",
+                      choices=["MOVE_TO", "MOVE_REL", "CLICK", "MOUSE_DOWN",
+                               "MOUSE_UP", "RIGHT_CLICK", "DOUBLE_CLICK",
+                               "DRAG_TO", "SCROLL", "TYPING", "PRESS",
+                               "KEY_DOWN", "KEY_UP", "HOTKEY", "WAIT"],
+                      help="Action type")
+    p_ba.add_argument("--x", type=float, help="X coordinate")
+    p_ba.add_argument("--y", type=float, help="Y coordinate")
+    p_ba.add_argument("--text", help="Text for TYPING action")
+    p_ba.add_argument("--key", help="Key for PRESS/KEY_DOWN/KEY_UP")
+    p_ba.add_argument("--keys", help="Comma-separated keys for HOTKEY")
+    p_ba.add_argument("--dx", type=int, help="Scroll delta X")
+    p_ba.add_argument("--dy", type=int, help="Scroll delta Y")
+    p_ba.add_argument("--duration", type=float, help="Duration for WAIT")
+
+    # page-text
+    sub.add_parser("page-text", help="Get page text content")
+
+    # page-html
+    sub.add_parser("page-html", help="Get page HTML")
+
+    # evaluate
+    p_eval = sub.add_parser("evaluate", help="Evaluate JavaScript in browser")
+    p_eval.add_argument("expression", help="JavaScript expression")
 
     # run-code
-    p_code = sub.add_parser("run-code", help="Execute code")
+    p_code = sub.add_parser("run-code", help="Execute code via shell")
     p_code.add_argument("code", help="Code to execute")
     p_code.add_argument("--lang", choices=["python", "javascript"],
                         default="python", help="Language (default: python)")
-    p_code.add_argument("--session", help="Session ID for state persistence")
 
     return parser
 
@@ -290,6 +364,10 @@ DISPATCH = {
     "download": cmd_download,
     "screenshot": cmd_screenshot,
     "navigate": cmd_navigate,
+    "browser-action": cmd_browser_action,
+    "page-text": cmd_page_text,
+    "page-html": cmd_page_html,
+    "evaluate": cmd_evaluate,
     "run-code": cmd_run_code,
 }
 
